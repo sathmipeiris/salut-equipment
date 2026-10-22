@@ -1,0 +1,9 @@
+{
+  "name": "Equipment Sign-Out",
+  "short_name": "Sign-Out",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f6fb",
+  "theme_color": "#1f3a73",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

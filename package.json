@@ -1,0 +1,15 @@
+{
+  "name": "salut-equipment-signout",
+  "version": "1.0.0",
+  "description": "Equipment sign-in / sign-out prototype: no-login staff app, QR identification, admin console, zero runtime dependencies.",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "dev": "DEMO_DATA=1 node --no-warnings --watch server.js",
+    "seed": "node --no-warnings lib/seed.js --reset",
+    "backup": "node --no-warnings lib/backup.js",
+    "test": "node --no-warnings --test test/*.test.js"
+  }
+}
