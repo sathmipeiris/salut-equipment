@@ -48,7 +48,7 @@ I considered and rejected: a SharePoint List + Power Apps app (per-user licensin
 
 ## 4. Scalability and distributed-systems needs
 
-**Short answer: for ~100 items, a few dozen staff and a handful of transactions per hour, a single node is the correct design, and distributing it would reduce reliability.** I kept the seams that make growth cheap:
+**Short answer: for ~90 items and the volume in the old response sheet (about 170 submissions in 28 months), a single node is the correct design, and distributing it would reduce reliability.** I kept the seams that make growth cheap:
 
 | Concern | Today | If SaLUT grows (e.g. 5,000 items, many warehouses) |
 |---|---|---|
@@ -76,6 +76,34 @@ Not built, deliberately: message queues, microservices, event sourcing framework
 
 **Known gap:** because staff need no login, anyone who has the link can submit transactions. For an internal tool this is the requested trade-off. Mitigations are in the next-steps list (restrict to company network/VPN, or add a shared site passcode).
 
-## 6. Assumptions
+## 6. What the real form and spreadsheet showed (and what changed because of it)
 
-The brief says to use the old Google Form to identify the fields. **I could not open the form from my build environment**, so the fields come from the brief's own list: employee, equipment, project / requester details, and sign-out or return location, plus due date, site address, notes and a condition flag that I added because they are standard for this workflow. If the original form has other fields they are quick to add (see *Next steps*). Sample data (names, projects, addresses, locations) is entirely fictional.
+I first built from the brief alone, then received the old form's questions and the inventory/response workbook and reconciled the app with them. No response data (names, emails, project addresses) was copied into this repo; all sample people, projects and addresses are fictional.
+
+**Form field → new app**
+
+| Old form | New app |
+|---|---|
+| Signing OUT / IN / *Adding Inventory* | Two big buttons. Adding inventory is **admin-only** (Add, or Import CSV): anyone adding items from the staff page risks duplicates and typos in the master list. |
+| Name of person checking out / signing in | "Your name": type-ahead, remembered on the device. |
+| Signing out / in location (1818, Cottontail) | Required dropdown, "Signing out from" / "Returning to". |
+| Project No and Project Name | One field with type-ahead; free text still allowed ("23-108 DGS IH"). |
+| Project Manager / Who requested (required) | "Requested by", **required** for sign-out. |
+| Project location (required) | **Required**; auto-filled for known projects. |
+| Unit / Apartment Number | Optional field, stored with the sign-out. |
+| Separate checkbox lists for scrubbers, dehumidifiers, fans, then "sign out other types?" | One screen, all categories at once: tiles, search, ID ranges (`S01-S08, D03, F12`), QR. |
+| "Other devices" free text | "Something not on the list?" box, recorded on the transaction (not tracked as inventory). |
+| Email address (filled on only a few responses) | Not collected. Identity is the typed name; avoids storing personal data nobody uses. |
+| On *return*, project / manager / location / unit were asked again | Not asked: they come from the item's sign-out record, so a return takes fewer taps and can't contradict the sign-out. |
+
+Added beyond the form: expected-back date and overdue flag, problem-on-return → maintenance, 15-minute undo, admin reversal and correction, QR labels, offline mode.
+
+**Findings that shaped the design**
+- **Equipment tags are `S01`–`S40`, `D01`–`D25`, `F01`–`F26`.** The app uses those exact tags (not a new scheme), so existing labels and habits carry over. The inventory tab spells some as `F1`; the importer normalises to `F01`.
+- **Status was derived by formulas, not recorded.** The old workbook decides IN/OUT by comparing in-vs-out counts per device across several tabs, and a note in it says new devices require editing formulas by hand. A missed return silently skews every later answer. The new app stores each item's state inside the same database transaction that records the movement.
+- **Largest single submission: 84 items.** The new limit is 200 items per transaction.
+- **Real volume is small:** about 170 submissions on the response tab between June 2024 and October 2026. That is the strongest argument for the single-server design in section 4.
+- **Data gap to resolve with the client:** the form offered 91 selectable tags, but the inventory list has 80. The 11 with no inventory record are `S39, S40, D24, D25, F20–F26`. Either they are real items missing from the list, or retired options still shown on the form. The CSV import lets the client add them once confirmed.
+- One dropdown option on the old return list read `#N/A`, a formula error leaking into the form. Free-form selection from a validated list removes that class of problem.
+
+**Other assumptions:** locations are exactly the two on the form (1818, Cottontail); "project location" means the job-site address; one shared admin PIN is acceptable for a small admin team.

@@ -2,7 +2,9 @@
 (function () {
   const { h, api, ApiError, uuid, fmtDate, ago, addDays, toast } = U;
   const app = document.getElementById('app');
-  const ID_IN_TEXT = /\b([A-Za-z]{1,4}-\d{3,4})\b/;
+  // Equipment tags look like S01, D25, F26. A label's QR holds https://site/e/S01 — read the ID after /e/ so a
+  // hostname such as "abc12.example.com" can never be mistaken for equipment.
+  const idFromScan = (raw) => { const s = String(raw || '').trim(); const m = s.match(/\/e\/([A-Za-z]{1,3}\d{2,3})(?:[/?#]|$)/) || s.match(/^([A-Za-z]{1,3}\d{2,3})$/); return m ? m[1].toUpperCase() : null; };
 
   const LS = {
     get(k, d) { try { const v = localStorage.getItem(`salut.${k}`); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -12,12 +14,12 @@
   if (qs.has('kiosk')) LS.set('kiosk', qs.get('kiosk') !== '0');
   const KIOSK = LS.get('kiosk', false);
 
-  const blankDetails = () => ({ employee: '', project: '', requester: '', site: '', location: '', due: '' });
+  const blankDetails = () => ({ employee: '', project: '', requester: '', site: '', unit: '', location: '', due: '' });
   const S = {
     data: null, byId: new Map(), view: 'home', mode: null,
     cart: new Set(), problems: new Set(), cat: 'all', q: '', showNA: false, mine: false,
-    d: Object.assign(blankDetails(), LS.get('details', {}), { due: '' }),
-    detailsOpen: true, notes: '', last: null, busy: false, sheet: false, sheetErr: null, attempt: null,
+    d: Object.assign(blankDetails(), LS.get('details', {}), { due: '', unit: '' }),
+    detailsOpen: true, notes: '', other: '', last: null, busy: false, sheet: false, sheetErr: null, attempt: null,
     queue: LS.get('queue', []), failed: LS.get('failed', []), online: navigator.onLine, el: {}, kioskTimer: null,
   };
   if (KIOSK) { S.d.employee = ''; S.d.project = ''; S.d.requester = ''; S.d.site = ''; }
@@ -74,7 +76,7 @@
 
   /* ================= selection helpers ================= */
   function startMode(mode, opts = {}) {
-    if (S.mode !== mode) { S.cart.clear(); S.problems.clear(); }
+    if (S.mode !== mode) { S.cart.clear(); S.problems.clear(); S.other = ''; }
     S.mode = mode; S.view = 'flow'; S.cat = 'all'; S.q = ''; S.showNA = false; S.sheet = false; S.notes = '';
     S.mine = !!(opts.mine && S.d.employee.trim());
     S.detailsOpen = !detailsComplete(); persistCart(); render(); window.scrollTo(0, 0);
@@ -94,10 +96,10 @@
   function parseIds(text) {
     const out = []; const bad = [];
     for (const tok of text.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean)) {
-      const m = tok.match(/^([A-Za-z]{1,4})[- ]?(\d{1,4})(?:\s*(?:\.\.|–|—|to|-)\s*(?:[A-Za-z]{1,4}[- ]?)?(\d{1,4}))?$/i);
+      const m = tok.match(/^([A-Za-z]{1,3})\s*-?\s*(\d{1,3})(?:\s*(?:\.\.|–|—|to|-)\s*(?:[A-Za-z]{1,3}\s*-?\s*)?(\d{1,3}))?$/i);
       if (!m) { bad.push(tok); continue; }
-      const a = +m[2]; const b = m[3] ? +m[3] : a; if (b < a || b - a > 100) { bad.push(tok); continue; }
-      for (let n = a; n <= b; n++) out.push(`${m[1].toUpperCase()}-${String(n).padStart(3, '0')}`);
+      const a = +m[2]; const b = m[3] ? +m[3] : a; if (a < 1 || b < a || b - a > 200) { bad.push(tok); continue; }
+      for (let n = a; n <= b; n++) out.push(`${m[1].toUpperCase()}${String(n).padStart(2, '0')}`);
     }
     return { ids: out, bad };
   }
@@ -109,8 +111,10 @@
   /* ================= details ================= */
   const detailsError = () => {
     if (S.d.employee.trim().length < 2) return { field: 'f-emp', msg: 'Please choose or type your name.' };
-    if (S.mode === 'out' && !S.d.project.trim()) return { field: 'f-proj', msg: 'Please enter the project.' };
     if (!S.d.location) return { field: 'f-loc', msg: 'Please choose a location.' };
+    if (S.mode === 'out' && !S.d.project.trim()) return { field: 'f-proj', msg: 'Please enter the project.' };
+    if (S.mode === 'out' && !S.d.requester.trim()) return { field: 'f-req', msg: 'Please say who requested the equipment.' };
+    if (S.mode === 'out' && !(S.d.site.trim() || resolveProject().site)) return { field: 'f-site', msg: 'Please enter the project location.' };
     return null;
   };
   const detailsComplete = () => !detailsError();
@@ -140,18 +144,20 @@
     const recent = LS.get('recentProjects', []).filter((r) => S.data.projects.some((p) => `${p.code} — ${p.name}` === r)).slice(0, 3);
     const dueIn = h('input', { type: 'date', id: 'f-due', min: S.data.today, value: S.d.due, onchange: (e) => { S.d.due = e.target.value; renderDetails(); } });
     const dueChip = (txt, v) => h('button', { type: 'button', class: `chip ${S.d.due === v ? 'on' : ''}`, onclick: () => { S.d.due = v; renderDetails(); } }, txt);
-    const siteIn = h('input', { type: 'text', id: 'f-site', placeholder: 'Filled in from the project, or type an address', value: S.d.site, oninput: (e) => { S.d.site = e.target.value; S.d.siteAuto = false; } });
-    const reqIn = h('input', { type: 'text', id: 'f-req', placeholder: 'Project manager / client contact', value: S.d.requester, oninput: (e) => { S.d.requester = e.target.value; } });
+    const siteIn = h('input', { type: 'text', id: 'f-site', placeholder: 'Address (fills in from the project)', value: S.d.site, oninput: (e) => { S.d.site = e.target.value; S.d.siteAuto = false; clearErr('f-site'); sync(); } });
+    const reqIn = h('input', { type: 'text', id: 'f-req', placeholder: 'Project manager / who asked', value: S.d.requester, autocomplete: 'off', autocapitalize: 'words', oninput: (e) => { S.d.requester = e.target.value; clearErr('f-req'); sync(); } });
+    const unitIn = h('input', { type: 'text', id: 'f-unit', placeholder: 'Optional, e.g. 4B', value: S.d.unit, autocomplete: 'off', oninput: (e) => { S.d.unit = e.target.value; } });
     function autoSite() { const p = resolveProject(); if (p.code && (!S.d.site || S.d.siteAuto)) { S.d.site = p.site; S.d.siteAuto = true; siteIn.value = p.site; } }
 
+    // Same order as the old form: who → where from → project → who asked → project location → unit
     box.replaceChildren(h('div', { class: 'card' },
       h('h2', null, h('span', { class: 'step' }, '1'), 'Who and where'),
-      h('div', { class: out ? 'grid2' : '' }, field('f-emp', 'Your name', emp), out && field('f-proj', 'Project', proj)),
+      h('div', { class: 'grid2' }, field('f-emp', out ? 'Your name' : 'Your name (returning)', emp), field('f-loc', out ? 'Signing out from' : 'Returning to', loc)),
+      out && h('div', { class: 'grid2' }, field('f-proj', 'Project no. and name', proj), field('f-req', 'Requested by', reqIn)),
       out && recent.length ? h('div', { class: 'chips', style: 'margin:-4px 0 12px' }, ...recent.map((r) => h('button', { type: 'button', class: 'chip', onclick: () => { S.d.project = r; autoSite(); renderDetails(); } }, r.split(' — ')[0]))) : null,
-      field('f-loc', out ? 'Signing out from' : 'Returning to', loc),
-      out && h('div', { class: 'field' }, h('label', { class: 'f' }, 'Expected back'),
+      out && h('div', { class: 'grid2' }, field('f-site', 'Project location', siteIn), field('f-unit', 'Unit / apartment no.', unitIn)),
+      out && h('div', { class: 'field' }, h('label', { class: 'f' }, 'Expected back (optional)'),
         h('div', { class: 'chips', style: 'margin-bottom:8px' }, dueChip('Today', addDays(0)), dueChip('1 week', addDays(7)), dueChip('2 weeks', addDays(14)), dueChip('1 month', addDays(30)), dueChip('Not sure', '')), dueIn),
-      out && h('details', { class: 'more' }, h('summary', null, 'More details (optional)'), h('div', { class: 'grid2' }, field('f-req', 'Requested by', reqIn), field('f-site', 'Site address', siteIn))),
       (okBtn = h('button', { class: 'btn small', disabled: detailsComplete() ? null : true, onclick: () => { S.detailsOpen = false; renderDetails(); } }, 'Looks good ✓'))));
   }
   function clearErr(id) { const i = document.getElementById(id); if (i) i.classList.remove('invalid'); const e = document.getElementById(`${id}-err`); if (e) e.hidden = true; }
@@ -165,7 +171,7 @@
   function renderPicker() {
     const out = S.mode === 'out';
     const search = h('input', { type: 'search', id: 'f-q', placeholder: out ? 'Search by ID or name…' : 'Search by ID, name or project…', value: S.q, autocomplete: 'off', oninput: (e) => { S.q = e.target.value; renderGrid(); } });
-    const quick = h('input', { type: 'text', id: 'f-quick', placeholder: 'e.g. FN-1..8, DH-2, AS-3', autocapitalize: 'characters', autocomplete: 'off', onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); doQuick(); } } });
+    const quick = h('input', { type: 'text', id: 'f-quick', placeholder: 'e.g. S01-S08, D03, F12', autocapitalize: 'characters', autocomplete: 'off', onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); doQuick(); } } });
     function doQuick() {
       const { ids, bad } = parseIds(quick.value); if (!ids.length && !bad.length) return;
       let added = 0; const skipped = [];
@@ -178,7 +184,9 @@
       h('h2', null, h('span', { class: 'step' }, '2'), out ? 'Pick equipment' : 'What are you returning?'),
       h('div', { class: 'row' }, h('div', { class: 'grow' }, search), h('button', { class: 'btn green small', onclick: openScanner, 'aria-label': 'Scan QR labels with the camera' }, '📷 Scan')),
       h('details', { class: 'more' }, h('summary', null, 'Type IDs instead'), h('div', { class: 'row' }, h('div', { class: 'grow' }, quick), h('button', { class: 'btn small', onclick: doQuick }, 'Add'))),
-      S.el.chips, S.el.grid));
+      S.el.chips, S.el.grid,
+      h('details', { class: 'more', open: S.other ? true : null }, h('summary', null, 'Something not on the list? (other equipment)'),
+        h('textarea', { id: 'f-other', placeholder: 'Describe other equipment, e.g. “2 extension cords, 1 hose reel”', oninput: (e) => { S.other = e.target.value; renderTray(); } }, S.other))));
     renderChips(); renderGrid();
   }
   function renderChips() {
@@ -247,16 +255,16 @@
     if (!S.el.tray) return;
     const n = S.cart.size; const ids = [...S.cart];
     S.el.tray.replaceChildren(h('div', { class: 'in' },
-      h('div', { class: 'count' }, n ? `${n} selected` : 'None selected'),
-      h('div', { class: 'ids' }, n ? ids.join(' · ') : 'Tap equipment to add it'),
+      h('div', { class: 'count' }, n ? `${n} selected` : S.other.trim() ? 'Other equipment' : 'None selected'),
+      h('div', { class: 'ids' }, n ? ids.join(' · ') : S.other.trim() ? S.other.trim() : 'Tap equipment to add it'),
       n ? h('button', { class: 'btn ghost small', onclick: () => { S.cart.clear(); S.problems.clear(); persistCart(); renderGrid(); renderTray(); } }, 'Clear') : null,
-      h('button', { class: `btn ${S.mode === 'out' ? '' : 'green'}`, disabled: n ? null : true, onclick: openReview }, S.mode === 'out' ? 'Review & sign out →' : 'Review & return →')));
+      h('button', { class: `btn ${S.mode === 'out' ? '' : 'green'}`, disabled: (n || S.other.trim()) ? null : true, onclick: openReview }, S.mode === 'out' ? 'Review & sign out →' : 'Review & return →')));
   }
 
   /* ================= review sheet & submit ================= */
   function openReview() {
     const err = detailsError(); if (err) { showErr(err); return toast(err.msg, 'bad'); }
-    if (!S.cart.size) return;
+    if (!S.cart.size && !S.other.trim()) return;
     S.sheet = true; S.sheetErr = null; renderSheet();
   }
   function closeSheet() { S.sheet = false; const s = document.getElementById('sheet'); if (s) s.remove(); }
@@ -264,6 +272,7 @@
     const p = S.mode === 'out' ? resolveProject() : { code: '', name: '', site: '' };
     const payload = {
       kind: S.mode, employee: S.d.employee.trim(), project_code: p.code, project_name: p.name, requester: S.d.requester, site: (S.mode === 'out' ? (S.d.site || p.site) : ''),
+      unit: S.mode === 'out' ? S.d.unit.trim() : '', other_devices: S.other.trim(),
       location: S.d.location, due_date: S.mode === 'out' ? S.d.due : '', notes: S.notes, client_time: new Date().toISOString(),
       items: [...S.cart].map((id) => ({ id, condition: S.problems.has(id) ? 'issue' : 'ok' })),
     };
@@ -280,8 +289,8 @@
     const notes = h('textarea', { id: 'f-notes', placeholder: anyProblem ? 'What’s wrong with it? (required)' : 'Anything the office should know? (optional)', oninput: (e) => { S.notes = e.target.value; }, class: S.sheetErr && S.sheetErr.field === 'notes' ? 'invalid' : '' }, S.notes);
     const sheet = h('div', { class: 'scrim', id: 'sheet', onclick: (e) => { if (e.target.classList.contains('scrim')) closeSheet(); } },
       h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Confirm' },
-        h('h2', null, out ? `Sign out ${n} item${n > 1 ? 's' : ''}` : `Return ${n} item${n > 1 ? 's' : ''}`),
-        h('div', { class: 'kv' }, ...kv('Who', S.d.employee), ...kv('Project', out ? (p.code ? `${p.code} — ${p.name}` : p.name) : ''), ...kv(out ? 'From' : 'Returning to', S.d.location), ...kv('Site', out ? (S.d.site || p.site) : ''), ...kv('Back by', out && S.d.due ? fmtDate(S.d.due) : out ? 'Not set' : '')),
+        h('h2', null, out ? `Sign out ${n ? `${n} item${n > 1 ? 's' : ''}` : 'other equipment'}` : `Return ${n ? `${n} item${n > 1 ? 's' : ''}` : 'other equipment'}`),
+        h('div', { class: 'kv' }, ...kv('Who', S.d.employee), ...kv('Project', out ? (p.code ? `${p.code} — ${p.name}` : p.name) : ''), ...kv('Requested by', out ? S.d.requester : ''), ...kv(out ? 'From' : 'Returning to', S.d.location), ...kv('Location', out ? (S.d.site || p.site) : ''), ...kv('Unit / apt', out ? S.d.unit : ''), ...kv('Back by', out && S.d.due ? fmtDate(S.d.due) : out ? 'Not set' : ''), ...kv('Other', S.other.trim())),
         h('div', null, ...[...S.cart].map((id) => { const e = S.byId.get(id); return h('div', { class: 'li' }, h('span', { class: 'id' }, id), h('span', { class: 'grow' }, e ? e.name : ''),
           out ? null : h('label', { class: 'prob' }, h('input', { type: 'checkbox', checked: S.problems.has(id), onchange: (ev) => { ev.target.checked ? S.problems.add(id) : S.problems.delete(id); renderSheet(); } }), 'Problem'),
           h('button', { class: 'x', 'aria-label': `Remove ${id}`, onclick: () => { S.cart.delete(id); S.problems.delete(id); persistCart(); renderGrid(); renderTray(); S.cart.size ? renderSheet() : closeSheet(); } }, '✕')); })),
@@ -289,7 +298,7 @@
         S.sheetErr ? h('div', { class: 'banner bad' }, h('div', null, S.sheetErr.msg, ...(S.sheetErr.list || []).map((m) => h('div', { style: 'font-weight:500' }, `• ${m}`)))) : null,
         h('div', { class: 'row', style: 'margin-top:8px' },
           h('button', { class: 'btn ghost', onclick: closeSheet, disabled: S.busy ? true : null }, 'Back'),
-          h('button', { class: `btn grow ${out ? '' : 'green'}`, onclick: submit, disabled: S.busy ? true : null }, S.busy ? 'Saving…' : out ? `Confirm sign-out (${n})` : `Confirm return (${n})`))));
+          h('button', { class: `btn grow ${out ? '' : 'green'}`, onclick: submit, disabled: S.busy ? true : null }, S.busy ? 'Saving…' : out ? `Confirm sign-out${n ? ` (${n})` : ''}` : `Confirm return${n ? ` (${n})` : ''}`))));
     document.body.append(sheet);
   }
   async function submit() {
@@ -306,7 +315,7 @@
         const bad = e.body.conflicts.map((c) => c.id); bad.forEach((id) => { S.cart.delete(id); S.problems.delete(id); }); persistCart();
         S.sheetErr = { msg: 'Some items just changed, so they were removed. Nothing has been saved yet — check the rest and confirm again.', list: e.body.conflicts.map((c) => c.message) };
         S.busy = false; await load(); S.cart.size ? renderSheet() : (closeSheet(), toast(e.body.conflicts[0].message, 'bad')); return;
-      } else { S.sheetErr = { msg: e.message || 'Could not save. Please try again.', field: e.body && e.body.field }; if (S.sheetErr.field && S.sheetErr.field !== 'notes') { S.busy = false; closeSheet(); showErr({ field: { employee: 'f-emp', project: 'f-proj', location: 'f-loc' }[S.sheetErr.field] || 'f-emp', msg: e.message }); return; } }
+      } else { S.sheetErr = { msg: e.message || 'Could not save. Please try again.', field: e.body && e.body.field }; if (S.sheetErr.field && S.sheetErr.field !== 'notes') { S.busy = false; closeSheet(); showErr({ field: { employee: 'f-emp', project: 'f-proj', location: 'f-loc', requester: 'f-req', site: 'f-site' }[S.sheetErr.field] || 'f-emp', msg: e.message }); return; } }
     }
     S.busy = false; if (S.sheet) renderSheet();
   }
@@ -314,7 +323,7 @@
     closeSheet(); S.busy = false;
     S.last = { mode: payload.kind, txn, undoToken, queued, at: Date.now(), n: payload.items.length };
     if (payload.kind === 'out' && payload.project_code) { const lbl = `${payload.project_code} — ${payload.project_name}`; LS.set('recentProjects', [lbl, ...LS.get('recentProjects', []).filter((x) => x !== lbl)].slice(0, 5)); }
-    persistDetails(); S.cart.clear(); S.problems.clear(); S.notes = ''; S.attempt = null; persistCart();
+    persistDetails(); S.cart.clear(); S.problems.clear(); S.notes = ''; S.other = ''; S.d.unit = ''; S.attempt = null; persistCart();
     S.view = 'done'; render(); window.scrollTo(0, 0);
     if (!queued) load();
     if (KIOSK) { clearTimeout(S.kioskTimer); S.kioskTimer = setTimeout(goHome, 12000); }
@@ -367,7 +376,7 @@
     } }, 'Undo this');
     app.replaceChildren(h('div', { class: `card done ${L.queued ? 'queued' : ''}` },
       h('div', { class: 'check' }, L.queued ? '⏳' : '✓'),
-      h('h1', null, L.queued ? 'Saved on this device' : out ? `Signed out ${L.n} item${L.n > 1 ? 's' : ''}` : `Returned ${L.n} item${L.n > 1 ? 's' : ''}`),
+      h('h1', null, L.queued ? 'Saved on this device' : !L.n ? 'Recorded' : out ? `Signed out ${L.n} item${L.n > 1 ? 's' : ''}` : `Returned ${L.n} item${L.n > 1 ? 's' : ''}`),
       h('p', { class: 'muted' }, L.queued ? 'No signal right now. It will upload automatically when you’re back online — nothing more to do.' : 'Recorded. You’re all set.'),
       h('div', { class: 'chips', style: 'justify-content:center;margin:14px 0 20px' }, ...L.txn.items.slice(0, 24).map((i) => h('span', { class: 'chip' }, i.id)), L.txn.items.length > 24 ? h('span', { class: 'chip' }, `+${L.txn.items.length - 24}`) : null),
       h('div', { class: 'row', style: 'justify-content:center' },
@@ -401,8 +410,8 @@
           if (det) { const r = await det.detect(video); raw = r[0] && r[0].rawValue; }
           else { const sc = Math.min(1, 640 / video.videoWidth); canvas.width = video.videoWidth * sc; canvas.height = video.videoHeight * sc; ctx.drawImage(video, 0, 0, canvas.width, canvas.height); const img = ctx.getImageData(0, 0, canvas.width, canvas.height); const r = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' }); raw = r && r.data; }
         }
-        const m = raw && raw.match(ID_IN_TEXT);
-        if (m) { const id = m[1].toUpperCase(); const now = Date.now(); if (id !== last || now - lastAt > 2500) { last = id; lastAt = now; const ok = addById(id); msg.textContent = ok ? `✓ ${id} added — keep scanning or tap Done` : `${id} — not added`; if (navigator.vibrate) navigator.vibrate(ok ? 60 : [80, 60, 80]); } }
+        const sid = raw && idFromScan(raw);
+        if (sid) { const id = sid; const now = Date.now(); if (id !== last || now - lastAt > 2500) { last = id; lastAt = now; const ok = addById(id); msg.textContent = ok ? `✓ ${id} added — keep scanning or tap Done` : `${id} — not added`; if (navigator.vibrate) navigator.vibrate(ok ? 60 : [80, 60, 80]); } }
       } catch { /* a bad frame is fine */ }
       setTimeout(() => requestAnimationFrame(tick), 180);
     };
@@ -414,7 +423,7 @@
     const m = location.pathname.match(/^\/e\/([A-Za-z0-9-]+)/) || (qs.get('e') ? [null, qs.get('e')] : null);
     if (!m) return;
     history.replaceState(null, '', '/');
-    const id = m[1].toUpperCase(); const e = S.byId.get(id);
+    const id = m[1].toUpperCase().replace('-', ''); const e = S.byId.get(id);   // also accepts the old "S-01" style
     if (!e) return toast(`${id} isn't in the inventory`, 'bad');
     addById(id);
   }

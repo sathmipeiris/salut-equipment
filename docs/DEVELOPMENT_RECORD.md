@@ -11,10 +11,10 @@
 - Vendored libraries: `qrcode-generator` (MIT), `jsQR` (Apache-2.0).
 
 ## Completed
-Everything under "Key features" in `TECHNICAL_SUMMARY.md`. Verified by 15 automated tests and a scripted browser run (phone and desktop viewports).
+Everything under "Key features" in `TECHNICAL_SUMMARY.md`. Reconciled with the old form's questions and the inventory/response workbook (see `DESIGN_DECISIONS.md` §6). Verified by 19 automated tests and a scripted browser run (phone and desktop viewports).
 
 ## Known limitations
-1. **Original Google Form fields were not inspected.** The form link was not reachable from the build environment; fields follow the brief's list. Compare against the real form and adjust.
+1. **The live Google Form was never opened.** The fields come from the form text and response workbook supplied afterwards. If the live form differs from that text, adjust.
 2. **No staff identity checking.** The link is the only gate (as requested). Anyone with it can create transactions.
 3. **One shared admin PIN.** Actions are attributed to the name typed at sign-in, which is not verified.
 4. **Hosting not deployed.** Runs locally; no live link. HTTPS is needed for in-app camera scanning and offline mode; scanning with the phone's own camera works without it.
@@ -26,7 +26,7 @@ Everything under "Key features" in `TECHNICAL_SUMMARY.md`. Verified by 15 automa
 10. Accessibility was designed for (large targets, labels, contrast, focus rings) but not audited with a screen reader.
 
 ## Recommended next steps
-1. Reconcile fields with the original form; add any missing ones (e.g. a request/work-order number, vehicle).
+1. Import the real inventory (Admin → Inventory → Import CSV) and resolve the 11 tags the form offered that are missing from the inventory list.
 2. Deploy on the chosen host with HTTPS; set `COOKIE_SECURE=1`, `TRUST_PROXY=1`, a strong `ADMIN_PIN`, and schedule `npm run backup`.
 3. Restrict the staff page to the company network/VPN, or add a shared site passcode.
 4. Print and apply QR labels; pilot with 5–10 items on one team; collect feedback.

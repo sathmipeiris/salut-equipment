@@ -63,7 +63,7 @@ function createApp(db, opts = {}) {
   const readJson = (req) => new Promise((resolve, reject) => {
     if (!/^application\/json\b/i.test(req.headers['content-type'] || '')) return reject(new HttpError(415, 'JSON required.'));
     let size = 0; const chunks = [];
-    req.on('data', (c) => { size += c.length; if (size > 100_000) { reject(new HttpError(413, 'Request too large.')); req.destroy(); } else chunks.push(c); });
+    req.on('data', (c) => { size += c.length; if (size > 400_000) { reject(new HttpError(413, 'Request too large.')); req.destroy(); } else chunks.push(c); });
     req.on('end', () => { try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}); } catch { reject(new HttpError(400, 'Invalid JSON.')); } });
     req.on('error', reject);
   });
@@ -164,6 +164,7 @@ function createApp(db, opts = {}) {
     if (m === 'GET' && p === '/api/admin/overview') return send(res, 200, svc.overview(db));
     if (m === 'GET' && p === '/api/admin/equipment') return send(res, 200, { equipment: svc.allEquipment(db), categories: svc.lookupList(db, 'categories'), locations: svc.lookupList(db, 'locations') });
     if (m === 'POST' && p === '/api/admin/equipment') return send(res, 201, { ok: true, ...svc.createEquipment(db, await readJson(req), actor) });
+    if (m === 'POST' && p === '/api/admin/equipment/import') return send(res, 200, { ok: true, ...svc.importEquipment(db, (await readJson(req)).rows, actor) });
     if (m === 'PUT' && (mm = p.match(/^\/api\/admin\/equipment\/([A-Za-z0-9-]+)$/))) return send(res, 200, svc.updateEquipment(db, mm[1].toUpperCase(), await readJson(req), actor));
     if (m === 'POST' && (mm = p.match(/^\/api\/admin\/equipment\/([A-Za-z0-9-]+)\/status$/))) return send(res, 200, svc.adjustStatus(db, mm[1].toUpperCase(), await readJson(req), actor));
     if (m === 'GET' && p === '/api/admin/transactions') return send(res, 200, { transactions: svc.listTransactions(db, { q: url.searchParams.get('q'), limit: url.searchParams.get('limit'), offset: url.searchParams.get('offset') }) });

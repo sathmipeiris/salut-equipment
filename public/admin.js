@@ -45,7 +45,7 @@
   async function overview() {
     const o = await api('/api/admin/overview');
     const kpi = (cls, n, l) => h('div', { class: `kpi ${cls}` }, h('div', { class: 'n' }, n), h('div', { class: 'l' }, l));
-    const loc = (e) => `${e.project_code ? `${e.project_code} · ` : ''}${e.project_name || ''}`;
+    const loc = (e) => `${e.project_code ? `${e.project_code} · ` : ''}${e.project_name || ''}${e.unit ? ` · Unit ${e.unit}` : ''}`;
     const tbl = (cols, rows) => h('div', { class: 'scroll' }, h('table', { class: 't' }, h('thead', null, h('tr', null, ...cols.map((c) => h('th', null, c)))), h('tbody', null, ...rows)));
     const attn = o.attention.map((e) => h('tr', null, h('td', null, h('b', null, e.id)), h('td', null, e.name), h('td', null, e.issue || '—'), h('td', null, h('button', { class: 'btn xs', onclick: () => statusModal(e, 'available') }, 'Mark repaired'))));
     content.replaceChildren(
@@ -76,7 +76,8 @@
     const cat = h('select', { onchange: (e) => { st.cat = e.target.value; draw(); } }, h('option', { value: '' }, 'All categories'), ...d.categories.map((c) => h('option', { value: c.id }, c.name)));
     const sts = h('select', { onchange: (e) => { st.status = e.target.value; draw(); } }, h('option', { value: '' }, 'Any status'), ...['available', 'out', 'maintenance', 'retired'].map((s) => h('option', { value: s }, s)));
     content.replaceChildren(
-      h('div', { class: 'toolbar' }, inp('Search ID, name, serial, holder, project…', 'q'), cat, sts, count, h('a', { class: 'btn small ghost', href: '#', onclick: (e) => { e.preventDefault(); addModal(d); } , style: 'text-decoration:none;display:inline-flex;align-items:center' }, '＋ Add equipment')),
+      h('div', { class: 'toolbar' }, inp('Search ID, name, serial, holder, project…', 'q'), cat, sts, count,
+        h('button', { class: 'btn small ghost', onclick: () => importModal() }, '⬆ Import CSV'), h('button', { class: 'btn small', onclick: () => addModal(d) }, '＋ Add equipment')),
       h('div', { class: 'card scroll' }, h('table', { class: 't' }, h('thead', null, h('tr', null, ...['ID', 'Item', 'Category', 'Status', 'Held by / project', 'Location', 'Due', ''].map((c) => h('th', null, c)))), body)));
     draw();
   }
@@ -86,6 +87,54 @@
     const count = h('input', { type: 'text', value: '1', inputmode: 'numeric' }); const loc = h('select', null, h('option', { value: '' }, '—'), ...d.locations.filter((l) => l.active).map((l) => h('option', { value: l.name }, l.name)));
     modal('Add equipment', h('div', null, field('Category', cat), field('Name / model', name), h('div', { class: 'grid2' }, field('How many? (bulk add, IDs auto-numbered)', count), field('Stored at', loc)), field('Serial number', serial), h('p', { class: 'muted' }, 'After adding, print QR labels from the “QR labels” tab.')),
       (close) => [h('button', { class: 'btn grow', onclick: async () => { try { const r = await api('/api/admin/equipment', { method: 'POST', body: { category_id: cat.value, name: name.value, count: count.value, serial: +count.value > 1 ? '' : serial.value, location: loc.value } }); toast(`Added ${r.ids[0]}${r.ids.length > 1 ? ` – ${r.ids[r.ids.length - 1]}` : ''}`, 'ok'); close(); show('inventory'); } catch (e) { fail(e); } } }, 'Add')]);
+  }
+  /* Minimal CSV/TSV parser (quotes, CRLF, embedded commas). Pasting straight from Excel/Sheets gives tab-separated text. */
+  function parseCsv(text) {
+    text = text.replace(/^﻿/, ''); const first = text.split(/\r?\n/, 1)[0] || ''; const sep = first.includes('\t') ? '\t' : ',';
+    const rows = []; let row = []; let cell = ''; let q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+      else if (c === '"') q = true;
+      else if (c === sep) { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); cell = ''; if (row.some((x) => x.trim())) rows.push(row); row = []; }
+      else cell += c;
+    }
+    row.push(cell); if (row.some((x) => x.trim())) rows.push(row);
+    return rows;
+  }
+  /* Accepts our template (id,category,name,serial,notes,location) AND the old inventory tabs (Name,Old Name,Tag,Serial No.,Description). */
+  function rowsFromTable(table) {
+    const head = table[0].map((x) => x.trim().toLowerCase()); const at = (...names) => head.findIndex((x) => names.includes(x));
+    const iId = at('id', 'equipment id', 'tag id'); const iName = at('name', 'model'); const iSerial = at('serial', 'serial no.', 'serial no', 'serial number');
+    const iNotes = at('notes'); const iOld = at('old name'); const iDesc = at('description'); const iCat = at('category', 'type'); const iLoc = at('location');
+    const idCol = iId >= 0 ? iId : iName;                          // old tabs keep the S01-style tag in the "Name" column
+    if (idCol < 0) throw new Error('Could not find an ID column. The first row should be a header such as: id,category,name,serial,notes,location');
+    const get = (r, i) => (i >= 0 && r[i] != null ? String(r[i]).trim() : '');
+    return table.slice(1).map((r) => ({
+      id: get(r, idCol), category: get(r, iCat), name: iId >= 0 ? get(r, iName) : '', serial: get(r, iSerial), location: get(r, iLoc),
+      notes: [get(r, iNotes), get(r, iOld) && `Old name: ${get(r, iOld)}`, get(r, iDesc)].filter(Boolean).join('; '),
+    })).filter((r) => r.id);
+  }
+  function importModal() {
+    const file = h('input', { type: 'file', accept: '.csv,.tsv,.txt,text/csv', onchange: async (e) => { const f = e.target.files[0]; if (f) { box.value = await f.text(); preview(); } } });
+    const box = h('textarea', { placeholder: 'id,category,name,serial,notes,location\nS01,Air Scrubbers,HEPA Air Scrubber,27536,,1818', style: 'min-height:150px;font-family:ui-monospace,Consolas,monospace;font-size:.85rem', oninput: () => preview() });
+    const info = h('div', { class: 'muted', style: 'margin:8px 0' }); const errs = h('div');
+    let rows = [];
+    function preview() {
+      errs.replaceChildren();
+      if (!box.value.trim()) { rows = []; info.textContent = ''; return; }
+      try { rows = rowsFromTable(parseCsv(box.value)); info.textContent = `${rows.length} item${rows.length === 1 ? '' : 's'} ready to import. Existing IDs are skipped, so it is safe to run again.`; }
+      catch (e) { rows = []; info.textContent = ''; errs.replaceChildren(h('div', { class: 'banner bad' }, e.message)); }
+    }
+    modal('Import equipment from a spreadsheet', h('div', null,
+      h('p', { class: 'muted' }, 'Export a sheet as CSV (or copy cells from Excel / Google Sheets and paste). IDs look like S01, D25, F26. The category is matched by name or by the ID’s first letter.'),
+      field('CSV file', file), field('…or paste here', box), info, errs),
+      (close) => [h('button', { class: 'btn grow', onclick: async () => {
+        if (!rows.length) return toast('Nothing to import yet', 'bad');
+        try { const r = await api('/api/admin/equipment/import', { method: 'POST', body: { rows } }); toast(`Imported ${r.added} item${r.added === 1 ? '' : 's'}${r.skipped.length ? ` · ${r.skipped.length} already existed` : ''}`, 'ok'); close(); show('inventory'); }
+        catch (e) { errs.replaceChildren(h('div', { class: 'banner bad' }, h('div', null, e.message, ...((e.body && e.body.errors) || []).map((x) => h('div', { style: 'font-weight:500' }, `• line ${x.row}: ${x.message}`))))); }
+      } }, 'Import')]);
   }
   function editModal(e) {
     const name = h('input', { type: 'text', value: e.name }); const serial = h('input', { type: 'text', value: e.serial }); const notes = h('textarea', null, e.notes);
@@ -108,7 +157,9 @@
       const { transactions } = await api(`/api/admin/transactions?limit=200&q=${encodeURIComponent(q)}`);
       body.replaceChildren(...transactions.map((t) => h('tr', { class: t.voided_at ? 'void' : '' },
         h('td', { style: 'white-space:nowrap' }, fmtDateTime(t.created_at)), h('td', null, h('span', { class: `badge ${{ out: 'out', in: 'ok', adjust: 'warn' }[t.kind]}` }, { out: 'Sign-out', in: 'Return', adjust: 'Correction' }[t.kind])),
-        h('td', null, t.employee), h('td', null, [t.project_code, t.project_name].filter(Boolean).join(' · ')), h('td', null, h('span', { class: 'mono' }, t.n > 8 ? `${t.items.split(', ').slice(0, 8).join(', ')} … (+${t.n - 8})` : t.items)),
+        h('td', null, t.employee),
+        h('td', null, [t.project_code, t.project_name].filter(Boolean).join(' · '), t.requester ? h('div', { class: 'muted' }, `Requested by ${t.requester}`) : null, t.site || t.unit ? h('div', { class: 'muted' }, [t.site, t.unit && `Unit ${t.unit}`].filter(Boolean).join(' · ')) : null),
+        h('td', null, t.n ? h('span', { class: 'mono' }, t.n > 8 ? `${t.items.split(', ').slice(0, 8).join(', ')} … (+${t.n - 8})` : t.items) : null, t.other_devices ? h('div', { class: 'muted' }, `Other: ${t.other_devices}`) : null),
         h('td', null, t.location || ''), h('td', null, t.notes || ''),
         h('td', null, t.voided_at ? h('span', { class: 'badge' }, `Reversed by ${t.voided_by}${t.void_reason ? `: ${t.void_reason}` : ''}`) : h('button', { class: 'btn xs ghost', onclick: () => voidModal(t, draw) }, 'Reverse')))));
     };

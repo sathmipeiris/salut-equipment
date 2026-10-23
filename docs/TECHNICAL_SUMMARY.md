@@ -13,13 +13,13 @@ A single small web server serves two browser apps (staff, admin) and a JSON/CSV 
 | Auth (admin) | PIN → session cookie | Simple for a small team; no accounts for staff. |
 
 ## Key features
-Staff: no-login link · sign out / return up to 100 items per transaction · search, category chips, ID-range entry, QR scan · remembers name/location/recent projects · due date · conflict detection · 15-minute undo · offline queue · kiosk mode · problem reporting on return.
-Admin: overview (available / out / maintenance, overdue, needs-attention, by-category) · inventory with bulk add and edit · manual status correction with reason · ledger search and reversal · printable QR labels · manage people, projects, locations, categories · audit log · dashboard feed links · CSV export.
+Staff: no-login link · sign out / return up to 200 items per transaction · search, category chips, ID-range entry, QR scan · remembers name/location/recent projects · due date · conflict detection · 15-minute undo · offline queue · kiosk mode · problem reporting on return.
+Admin: CSV import of the existing inventory sheet · overview (available / out / maintenance, overdue, needs-attention, by-category) · inventory with bulk add and edit · manual status correction with reason · ledger search and reversal · printable QR labels · manage people, projects, locations, categories · audit log · dashboard feed links · CSV export.
 
 ## Data storage
 Tables: `equipment` (current state), `transactions` + `txn_items` (append-only ledger; stores previous state so reversal is exact), `employees`, `projects`, `locations`, `categories`, `sessions`, `audit`, `settings`. One file: `data/equipment.db`. Backup: `npm run backup` (consistent while running; keeps 30).
 
-Fields recorded per transaction: employee, project code/name, requester, site, from/to location, expected-return date, notes, per-item condition, server timestamp, client timestamp, device (user-agent), and for each item its state before the change.
+Fields recorded per transaction (matching the old form): employee, project no./name, requested by, project location, unit/apartment, from/to location (1818 / Cottontail), other equipment (free text), expected-return date, notes, per-item condition, server timestamp, client timestamp, device (user-agent), and for each item its state before the change.
 
 ## Security
 See `DESIGN_DECISIONS.md` §5. In short: hashed PIN, HttpOnly SameSite cookie, rate limiting, CSP, output escaping by construction, server-side validation of everything, formula-safe CSV, rotating read-only feed token, audit log.
@@ -43,4 +43,4 @@ Admin → Settings shows token-protected, read-only links:
 In **Excel / Power BI**: *Get Data → From Web*, paste the link, set a refresh schedule. Because the existing M365 subscription already includes Excel (and Power BI Desktop is free), this gives a dashboard without extra licences. (Scheduled refresh in the Power BI *service* may need a paid licence and a reachable URL; I have not tested this.) SharePoint/Power Automate or Salesforce could ingest the same feed; I have not built or tested those.
 
 ## Testing
-`npm test` runs 15 automated API tests, including a 25-way simultaneous-request race, idempotent retries, all-or-nothing conflicts, undo tokens, admin authorisation, reversal rules, bulk ID generation, CSV formula safety, and rate limiting. A headless-browser run exercised the staff flow (sign out, return with problem, undo, QR deep link, offline queue and replay), the desktop layout, and every admin tab with no page errors.
+`npm test` runs 19 automated API tests, including a 25-way simultaneous-request race, idempotent retries, all-or-nothing conflicts, undo tokens, admin authorisation, reversal rules, bulk ID generation, CSV formula safety, required-field rules from the old form, a 90-item transaction, the CSV importer (including all-or-nothing validation) and an in-place upgrade of databases from the first release, and rate limiting. A headless-browser run exercised the staff flow (sign out, return with problem, undo, QR deep link, offline queue and replay), the desktop layout, and every admin tab with no page errors.
