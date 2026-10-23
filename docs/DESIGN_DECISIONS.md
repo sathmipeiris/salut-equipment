@@ -10,14 +10,14 @@ Field staff are often on a phone, wearing gloves, in poor light, with a truck wa
 |---|---|
 | **Two giant buttons on the home screen: Sign out / Return** | The only question a person must answer first. No menus, no jargon. |
 | **No login; the name is remembered on that device** | Brief requires link-only access. Typing a name once and never again is faster than any password. Kiosk mode does *not* remember names (shared device). |
-| **Tap-to-select tiles with large IDs (AS-003)** | The ID is what is printed on the equipment, so staff can match by eye. 54 px+ touch targets, 18 px base text, high contrast for sunlight. |
+| **Tap-to-select tiles with large IDs (S03)** | The ID is what is printed on the equipment, so staff can match by eye. 54 px+ touch targets, 18 px base text, high contrast for sunlight. |
 | **Category chips + live search + "type IDs" box (`FN-1..8, DH-2`)** | Three ways to build a long list quickly, so a 30-item job takes under a minute. This is what removes "excessive scrolling". |
-| **QR labels: scan in-app, or with the phone's own camera** | Each label encodes `https://site/e/AS-003`. Scanning with any camera opens the app with that item already added. The in-app *Scan* button adds many in a row. |
+| **QR labels: scan in-app, or with the phone's own camera** | Each label encodes `https://site/e/S03`. Scanning with any camera opens the app with that item already added. The in-app *Scan* button adds many in a row. |
 | **Return list shows *my* items, grouped by project, with "Select all N"** | Returning is the most common mistake-prone step. People return a whole job at once, so one tap per project. |
 | **Remembers location and recent projects; project auto-fills the site** | Fewer fields to type each time. |
 | **Details collapse to a one-line summary after step 1** | Keeps the equipment picker on screen, so there is little scrolling. |
 | **Review sheet before confirming, then a big green tick with 15-min Undo** | Confirmation catches errors before they are saved; Undo catches the ones noticed afterwards, without calling the office. |
-| **Plain-language errors** | "AS-005 is already signed out to Daniel Okafor (Anacostia Riverwalk)" instead of "409 Conflict". |
+| **Plain-language errors** | "S05 is already signed out to Priya Nair (Harbor Street Library)" instead of "409 Conflict". |
 | **Works offline** | Basements and culverts have no signal. Transactions are saved on the device and upload automatically; the screen says "Saved on this device". |
 | **Kiosk mode (`/?kiosk=1`)** | Resets to the start screen after 12 s on the confirmation or 3 min idle, and forgets the previous person, so a warehouse tablet is always ready. |
 
