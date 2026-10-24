@@ -345,6 +345,7 @@
     const late = eq.filter((e) => e.status === 'out' && e.due_date && e.due_date < S.data.today).length;
     const mine = S.d.employee ? eq.filter((e) => e.status === 'out' && sameName(e.holder, S.d.employee)).length : 0;
     const bits = [];
+    const inst = installBanner(); if (inst) bits.push(inst);
     if (S.queue.length) bits.push(h('div', { class: 'banner warn' }, `⏳ ${S.queue.length} transaction${S.queue.length > 1 ? 's' : ''} saved on this device — uploading when you’re back online.`, h('button', { class: 'btn small ghost', onclick: flushQueue }, 'Retry now')));
     if (S.failed.length) bits.push(h('div', { class: 'banner bad' }, h('div', { class: 'grow' }, `${S.failed.length} saved transaction${S.failed.length > 1 ? 's' : ''} couldn’t be applied after reconnecting. Please tell an administrator.`, ...S.failed.slice(0, 3).map((f) => h('div', { style: 'font-weight:500;font-size:.9rem' }, `• ${f.kind === 'out' ? 'Sign-out' : 'Return'} ${f.items.slice(0, 5).join(', ')}: ${f.why}`))), h('button', { class: 'btn small ghost', onclick: () => { S.failed = []; LS.set('failed', []); renderHome(); } }, 'Dismiss')));
     if (S.cart.size) bits.push(h('div', { class: 'banner info' }, h('span', { class: 'grow' }, `You have ${S.cart.size} item${S.cart.size > 1 ? 's' : ''} selected for ${S.mode === 'out' ? 'sign-out' : 'return'}.`), h('button', { class: 'btn small', onclick: () => startMode(S.mode) }, 'Continue')));
@@ -418,6 +419,21 @@
     tick();
   }
 
+  /* ================= install as an app (PWA) ================= */
+  let installEvent = null;
+  const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; if (S.view === 'home' && S.data) renderHome(); });
+  window.addEventListener('appinstalled', () => { installEvent = null; toast('Installed — find “Sign-Out” on your home screen / apps', 'ok'); if (S.view === 'home' && S.data) renderHome(); });
+  function installBanner() {
+    if (KIOSK || isStandalone() || LS.get('installDismissed', false)) return null;
+    const later = h('button', { class: 'link', onclick: () => { LS.set('installDismissed', true); renderHome(); } }, 'Not now');
+    if (installEvent) return h('div', { class: 'banner info' }, h('span', { class: 'grow' }, 'Install this as an app: one tap to open, works offline.'),
+      h('button', { class: 'btn small', onclick: async () => { installEvent.prompt(); try { await installEvent.userChoice; } catch { /* ignore */ } installEvent = null; renderHome(); } }, 'Install'), later);
+    if (isIOS()) return h('div', { class: 'banner info' }, h('span', { class: 'grow' }, 'To install on this iPhone/iPad: tap the Share button, then “Add to Home Screen”.'), later);
+    return null;
+  }
+
   /* ================= boot ================= */
   function deepLink() {
     const m = location.pathname.match(/^\/e\/([A-Za-z0-9-]+)/) || (qs.get('e') ? [null, qs.get('e')] : null);
@@ -440,6 +456,8 @@
     const saved = LS.get('cart', null);
     if (saved && saved.ids && saved.ids.length) { S.mode = saved.mode; saved.ids.forEach((id) => { const e = S.byId.get(id); if (e && (saved.mode === 'out' ? e.status === 'available' : e.status === 'out')) S.cart.add(id); }); if (!S.cart.size) S.mode = null; }
     render(); setNet(navigator.onLine); deepLink(); flushQueue();
+    const go = qs.get('start');                                  // home-screen shortcuts: /?start=out and /?start=in
+    if ((go === 'out' || go === 'in') && S.view === 'home') { history.replaceState(null, '', '/'); startMode(go, { mine: go === 'in' }); }
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('/sw.js').catch(() => {});
   })();
 })();

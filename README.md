@@ -42,6 +42,9 @@ The first start loads **fictional sample data** (91 items tagged `S01–S40`, `D
 ### Try it on a phone
 Phone and computer on the same Wi-Fi: find the computer's IP address (e.g. `192.168.1.20`) and open `http://192.168.1.20:3000/` on the phone. In-page camera scanning needs HTTPS (see the Technical Summary), but scanning a printed QR label with the phone's normal camera app works over plain HTTP.
 
+### Install it like an app
+The staff page installs on phones, tablets and desktops (home-screen icon, full-screen, opens offline). It needs an HTTPS address; steps for Android, iPhone and desktop, and notes on making an APK, are in [`docs/INSTALL_AS_APP.md`](docs/INSTALL_AS_APP.md).
+
 ### Other commands
 
 | Command | What it does |
