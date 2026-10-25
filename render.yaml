@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: salut-equipment
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: ADMIN_PIN
+        sync: false        # you type this in the Render dashboard
