@@ -8,6 +8,7 @@
 
   const badge = (status) => h('span', { class: `badge ${{ available: 'ok', out: 'out', maintenance: 'warn', retired: '' }[status] || ''}` }, { available: 'Available', out: 'Signed out', maintenance: 'Maintenance', retired: 'Retired' }[status] || status);
   const fail = (e) => toast(e instanceof ApiError || e.message ? e.message : 'Something went wrong', 'bad');
+  const brand = () => h('a', { class: 'brand', href: '/admin', 'aria-label': 'SaLUT Equipment Admin' }, h('img', { src: '/brand/salut-wordmark.png', alt: 'SaLUT, Soil and Land Use Technology', width: 960, height: 207 }));
   const field = (lab, el) => h('div', { class: 'field' }, h('label', { class: 'f' }, lab), el);
 
   function modal(title, body, actions) {
@@ -23,14 +24,14 @@
     const err = h('div', { class: 'err', hidden: true });
     const go = async () => { try { const r = await api('/api/admin/login', { method: 'POST', body: { pin: pin.value, name: name.value } }); S.actor = r.actor; shell(); } catch (e) { err.hidden = false; err.textContent = e.message; pin.select(); } };
     pin.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); }); name.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-    root.replaceChildren(h('header', { class: 'top' }, h('div', { class: 'brand' }, 'Equipment Admin', h('small', null, 'Authorized staff only')), h('a', { href: '/' }, '← Staff page')),
-      h('div', { class: 'card login' }, h('h2', { style: 'margin-bottom:14px' }, 'Administrator sign-in'), field('PIN', pin), field('Name', name), err, h('button', { class: 'btn', style: 'width:100%', onclick: go }, 'Sign in')));
+    root.replaceChildren(h('header', { class: 'top' }, brand(), h('span', { class: 'who' }, 'Admin'), h('a', { class: 'navbtn', href: '/' }, '← Staff page')),
+      h('div', { class: 'card login' }, h('img', { class: 'login-logo', src: '/brand/salut-mark.png', alt: '' }), h('h2', { style: 'margin:0 0 14px;justify-content:center' }, 'Equipment Admin sign-in'), field('PIN', pin), field('Name', name), err, h('button', { class: 'btn', style: 'width:100%', onclick: go }, 'Sign in')));
     pin.focus();
   }
   function shell() {
     content = h('div', { class: 'a-wrap' });
     root.replaceChildren(
-      h('header', { class: 'top' }, h('div', { class: 'brand' }, 'Equipment Admin', h('small', null, `Signed in as ${S.actor}`)), h('a', { href: '/' }, 'Staff page'), h('button', { onclick: async () => { await api('/api/admin/logout', { method: 'POST', body: {} }); loginView(); } }, 'Sign out')),
+      h('header', { class: 'top' }, brand(), h('span', { class: 'who' }, `Admin · ${S.actor}`), h('a', { class: 'navbtn', href: '/' }, 'Staff page'), h('button', { onclick: async () => { await api('/api/admin/logout', { method: 'POST', body: {} }); loginView(); } }, 'Sign out')),
       h('nav', { class: 'tabs no-print', id: 'tabs' }), content);
     show(location.hash.slice(1) || 'overview');
   }
@@ -187,7 +188,7 @@
       sheet.replaceChildren(...rows.map((e) => {
         const qr = qrcode(0, 'M'); qr.addData(`${b}/e/${e.id}`); qr.make();
         const svg = new DOMParser().parseFromString(qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true }), 'image/svg+xml').documentElement;
-        return h('div', { class: 'label' }, document.importNode(svg, true), h('div', null, h('div', { class: 'lid' }, e.id), h('div', { class: 'lnm' }, e.name), h('div', { class: 'lsc' }, 'Scan to sign out / return')));
+        return h('div', { class: 'label' }, document.importNode(svg, true), h('div', null, h('div', { class: 'lid' }, e.id), h('div', { class: 'lnm' }, e.name), h('div', { class: 'lsc' }, h('img', { class: 'lmark', src: '/brand/salut-mark.png', alt: '' }), 'SaLUT · scan to sign out / return')));
       }));
       count.textContent = `${rows.length} labels`;
     };

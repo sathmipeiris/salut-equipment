@@ -1,8 +1,8 @@
 'use strict';
 // Offline shell: the app opens with no signal (basements, culverts, remote sites). Transactions made offline
 // are queued by the page itself (app.js) and replayed with their original idempotency keys.
-const CACHE = 'salut-shell-v2';
-const SHELL = ['/', '/styles.css', '/common.js', '/app.js', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png', '/vendor/jsQR.js'];
+const CACHE = 'salut-shell-v3';
+const SHELL = ['/', '/styles.css', '/common.js', '/app.js', '/manifest.webmanifest', '/favicon-64.png', '/brand/salut-wordmark.png', '/brand/salut-mark.png', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png', '/vendor/jsQR.js'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });

@@ -350,7 +350,7 @@
     if (S.failed.length) bits.push(h('div', { class: 'banner bad' }, h('div', { class: 'grow' }, `${S.failed.length} saved transaction${S.failed.length > 1 ? 's' : ''} couldn’t be applied after reconnecting. Please tell an administrator.`, ...S.failed.slice(0, 3).map((f) => h('div', { style: 'font-weight:500;font-size:.9rem' }, `• ${f.kind === 'out' ? 'Sign-out' : 'Return'} ${f.items.slice(0, 5).join(', ')}: ${f.why}`))), h('button', { class: 'btn small ghost', onclick: () => { S.failed = []; LS.set('failed', []); renderHome(); } }, 'Dismiss')));
     if (S.cart.size) bits.push(h('div', { class: 'banner info' }, h('span', { class: 'grow' }, `You have ${S.cart.size} item${S.cart.size > 1 ? 's' : ''} selected for ${S.mode === 'out' ? 'sign-out' : 'return'}.`), h('button', { class: 'btn small', onclick: () => startMode(S.mode) }, 'Continue')));
     else if (mine) bits.push(h('div', { class: 'banner info' }, h('span', { class: 'grow' }, `${S.d.employee.split(' ')[0]}, you have ${mine} item${mine > 1 ? 's' : ''} signed out.`), h('button', { class: 'btn small green', onclick: () => startMode('in', { mine: true }) }, 'Return them')));
-    app.replaceChildren(...bits,
+    app.replaceChildren(h('h1', { class: 'page-title' }, 'Equipment Sign-Out'), ...bits,
       h('div', { class: 'hero' },
         h('button', { class: 'big out', onclick: () => startMode('out') }, h('span', { class: 'ic' }, '📤'), h('span', null, h('div', { class: 't' }, 'Sign out'), h('div', { class: 's' }, 'Taking equipment to a site'))),
         h('button', { class: 'big in', onclick: () => startMode('in', { mine: true }) }, h('span', { class: 'ic' }, '📥'), h('span', null, h('div', { class: 't' }, 'Return'), h('div', { class: 's' }, 'Bringing equipment back')))),

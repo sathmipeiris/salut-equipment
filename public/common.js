@@ -2,6 +2,11 @@
 // Shared helpers for the staff app and the admin console. No framework, no build step.
 // All DOM is built with h() + textContent, never innerHTML, so user-entered text can't inject markup.
 (function () {
+  // The DOM turns a null/false argument into the literal text "null"/"false". Our render code uses `cond ? el : null`
+  // freely, so make replaceChildren skip empty values instead of printing them.
+  const nativeReplace = Element.prototype.replaceChildren;
+  Element.prototype.replaceChildren = function (...kids) { return nativeReplace.apply(this, kids.filter((k) => k != null && k !== false)); };
+
   const h = (tag, attrs, ...kids) => {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) {

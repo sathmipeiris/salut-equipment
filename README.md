@@ -75,6 +75,9 @@ The staff page installs on phones, tablets and desktops (home-screen icon, full-
 
 **Admin:** *Inventory* → Add / Import CSV → *QR labels* → print. *Activity* shows every transaction (searchable by person, project, requester, item, other equipment) and lets an administrator reverse mistakes. *Settings* has the dashboard links and PIN change.
 
+## Branding
+The SaLUT wordmark and circular mark supplied for this project are in `public/brand/`, and the app icons (`icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png`, `favicon-*.png`) in `public/` are generated from them. Brand colors (navy `#27377c`, yellow `#f8d13e`) are the CSS variables at the top of `public/styles.css`. To re-brand, replace those image files and edit the variables.
+
 ## Docs
 
 - [`docs/DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md): why it is built this way, how it maps to the old form, scalability

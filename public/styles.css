@@ -1,6 +1,6 @@
 /* Light, high-contrast, glove- and sunlight-friendly. Big touch targets, no hover-only behaviour. */
 :root {
-  --navy: #1f3a73; --blue: #2456d6; --blue-soft: #e7eefc; --gold: #d99a14; --gold-soft: #fff4d6;
+  --navy: #27377c; --blue: #2f48b0; --blue-soft: #e8ebf8; --gold: #f8d13e; --gold-soft: #fff6d1; --charcoal: #322d27;
   --ok: #17835a; --ok-soft: #e1f5ec; --warn: #b36b00; --warn-soft: #fff0d6; --bad: #bf3434; --bad-soft: #fde8e8;
   --bg: #f3f6fb; --card: #ffffff; --line: #d6deec; --text: #172036; --muted: #55627d;
   --r: 14px; --shadow: 0 1px 2px rgba(23,32,54,.06), 0 4px 14px rgba(23,32,54,.07);
@@ -16,12 +16,15 @@ button { cursor: pointer; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
 /* top bar */
-.top { position: sticky; top: 0; z-index: 20; background: var(--navy); color: #fff; display: flex; align-items: center; gap: 12px; padding: 10px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
-.top .brand { font-weight: 800; letter-spacing: .02em; font-size: 1.05rem; flex: 1; }
-.top .brand small { display: block; font-weight: 500; opacity: .8; font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; }
-.top button, .top a { background: rgba(255,255,255,.14); color: #fff; border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 600; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; }
-.top .net { font-size: .75rem; padding: 4px 9px; border-radius: 99px; background: rgba(255,255,255,.18); }
-.top .net.off { background: var(--gold); color: #3a2800; font-weight: 700; }
+.top { position: sticky; top: 0; z-index: 20; background: #fff; color: var(--text); display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 4px solid var(--gold); box-shadow: 0 2px 8px rgba(39,55,124,.12); }
+.top .brand { flex: 1; min-width: 0; display: block; line-height: 0; }
+.top .brand img { height: 40px; width: auto; max-width: 100%; display: block; object-fit: contain; object-position: left center; }
+.top .who { font-size: .8rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.top button, .top .navbtn { background: var(--blue-soft); color: var(--navy); border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 700; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; }
+.top .net { font-size: .75rem; padding: 4px 10px; border-radius: 99px; background: var(--ok-soft); color: #0f6a47; font-weight: 700; white-space: nowrap; }
+.top .net.off { background: var(--gold); color: #3a2e00; }
+.page-title { font-size: 1.5rem; color: var(--navy); margin: 4px 2px 12px; }
+.login-logo { display: block; width: 84px; height: 84px; margin: 0 auto 10px; }
 
 .wrap { max-width: 1100px; margin: 0 auto; padding: 14px 14px 150px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; }
@@ -35,7 +38,7 @@ button { cursor: pointer; }
 .big .t { font-size: 1.7rem; font-weight: 800; }
 .big .s { opacity: .92; font-size: .95rem; }
 .big .ic { font-size: 2.4rem; line-height: 1; }
-.big.out { background: linear-gradient(135deg, #2456d6, #1c3f9e); }
+.big.out { background: linear-gradient(135deg, #3a4fae, #27377c); }
 .big.in { background: linear-gradient(135deg, #1f9d6b, #13734d); }
 .pills { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
 .pill { background: var(--card); border: 1px solid var(--line); border-radius: 99px; padding: 8px 14px; font-weight: 700; }

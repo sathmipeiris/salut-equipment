@@ -1,6 +1,6 @@
 :root { font-size: 16px; }
 .a-wrap { max-width: 1280px; margin: 0 auto; padding: 16px 16px 60px; }
-.tabs { display: flex; gap: 4px; flex-wrap: wrap; background: #fff; border-bottom: 1px solid var(--line); padding: 8px 16px 0; position: sticky; top: 64px; z-index: 15; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; background: #fff; border-bottom: 1px solid var(--line); padding: 8px 16px 0; position: sticky; top: 68px; z-index: 15; }
 .tab { border: 0; background: none; padding: 12px 16px; font-weight: 800; color: var(--muted); border-bottom: 4px solid transparent; min-height: 48px; }
 .tab.on { color: var(--navy); border-color: var(--gold); }
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
@@ -33,9 +33,10 @@ table.t tr.void td { color: #8892a8; text-decoration: line-through; } table.t tr
 .label svg { width: 96px; height: 96px; display: block; }
 .labels.two .label svg { width: 130px; height: 130px; }
 .label .lid { font-size: 1.7rem; font-weight: 900; letter-spacing: .03em; line-height: 1; }
-.label .lnm { font-size: .8rem; margin-top: 4px; } .label .lsc { font-size: .68rem; color: #444; margin-top: 6px; text-transform: uppercase; letter-spacing: .05em; }
+.label .lnm { font-size: .8rem; margin-top: 4px; } .label .lmark { width: 16px; height: 16px; vertical-align: -3px; margin-right: 5px; }
+.label .lsc { font-size: .68rem; color: #444; margin-top: 6px; text-transform: uppercase; letter-spacing: .05em; }
 
-@media (max-width: 800px) { .kpis { grid-template-columns: repeat(2, 1fr); } .cols { grid-template-columns: 1fr; } .labels { grid-template-columns: repeat(2, 1fr); } .tabs { top: 64px; } }
+@media (max-width: 800px) { .kpis { grid-template-columns: repeat(2, 1fr); } .cols { grid-template-columns: 1fr; } .labels { grid-template-columns: repeat(2, 1fr); } .tabs { top: 68px; } }
 @media print {
   body { background: #fff; } .top, .tabs, .no-print, #toast, .scrim { display: none !important; }
   .a-wrap { padding: 0; max-width: none; } .card.print-card { box-shadow: none; border: 0; padding: 0; }
