@@ -59,5 +59,18 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = ''; }, 3200);
   }
 
-  window.U = { h, api, ApiError, uuid, fmtDate, fmtDateTime, ago, todayStr, addDays, toast };
+  // Line icons (stroke = currentColor) so buttons stay crisp, on-brand and free of emoji.
+  const ICONS = {
+    out: 'M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M4 13v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5',
+    in: 'M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 13v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5',
+    scan: 'M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16',
+  };
+  const icon = (name, size = 24) => {
+    const NS = 'http://www.w3.org/2000/svg';
+    const s = document.createElementNS(NS, 'svg');
+    for (const [k, v] of Object.entries({ viewBox: '0 0 24 24', width: size, height: size, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', class: 'icon' })) s.setAttribute(k, v);
+    const p = document.createElementNS(NS, 'path'); p.setAttribute('d', ICONS[name]); s.append(p); return s;
+  };
+
+  window.U = { icon, h, api, ApiError, uuid, fmtDate, fmtDateTime, ago, todayStr, addDays, toast };
 })();

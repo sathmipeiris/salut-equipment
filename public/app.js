@@ -182,7 +182,7 @@
     S.el.chips = h('div', { class: 'chips', style: 'margin:12px 0' }); S.el.grid = h('div');
     S.el.picker.replaceChildren(h('div', { class: 'card' },
       h('h2', null, h('span', { class: 'step' }, '2'), out ? 'Pick equipment' : 'What are you returning?'),
-      h('div', { class: 'row' }, h('div', { class: 'grow' }, search), h('button', { class: 'btn green small', onclick: openScanner, 'aria-label': 'Scan QR labels with the camera' }, '📷 Scan')),
+      h('div', { class: 'row' }, h('div', { class: 'grow' }, search), h('button', { class: 'btn green small', onclick: openScanner, 'aria-label': 'Scan QR labels with the camera' }, U.icon('scan', 18), ' Scan')),
       h('details', { class: 'more' }, h('summary', null, 'Type IDs instead'), h('div', { class: 'row' }, h('div', { class: 'grow' }, quick), h('button', { class: 'btn small', onclick: doQuick }, 'Add'))),
       S.el.chips, S.el.grid,
       h('details', { class: 'more', open: S.other ? true : null }, h('summary', null, 'Something not on the list? (other equipment)'),
@@ -350,14 +350,17 @@
     if (S.failed.length) bits.push(h('div', { class: 'banner bad' }, h('div', { class: 'grow' }, `${S.failed.length} saved transaction${S.failed.length > 1 ? 's' : ''} couldn’t be applied after reconnecting. Please tell an administrator.`, ...S.failed.slice(0, 3).map((f) => h('div', { style: 'font-weight:500;font-size:.9rem' }, `• ${f.kind === 'out' ? 'Sign-out' : 'Return'} ${f.items.slice(0, 5).join(', ')}: ${f.why}`))), h('button', { class: 'btn small ghost', onclick: () => { S.failed = []; LS.set('failed', []); renderHome(); } }, 'Dismiss')));
     if (S.cart.size) bits.push(h('div', { class: 'banner info' }, h('span', { class: 'grow' }, `You have ${S.cart.size} item${S.cart.size > 1 ? 's' : ''} selected for ${S.mode === 'out' ? 'sign-out' : 'return'}.`), h('button', { class: 'btn small', onclick: () => startMode(S.mode) }, 'Continue')));
     else if (mine) bits.push(h('div', { class: 'banner info' }, h('span', { class: 'grow' }, `${S.d.employee.split(' ')[0]}, you have ${mine} item${mine > 1 ? 's' : ''} signed out.`), h('button', { class: 'btn small green', onclick: () => startMode('in', { mine: true }) }, 'Return them')));
-    app.replaceChildren(h('h1', { class: 'page-title' }, 'Equipment Sign-Out'), ...bits,
+    const kpi = (cls, num, label) => h('div', { class: `kpi ${cls}` }, h('div', { class: 'n' }, num), h('div', { class: 'l' }, label));
+    app.replaceChildren(
+      h('div', { class: 'page-head' }, h('h1', { class: 'page-title' }, 'Equipment Sign-Out'), h('p', { class: 'sub' }, 'Field equipment tracking: air scrubbers, dehumidifiers and fans')),
+      ...bits,
       h('div', { class: 'hero' },
-        h('button', { class: 'big out', onclick: () => startMode('out') }, h('span', { class: 'ic' }, '📤'), h('span', null, h('div', { class: 't' }, 'Sign out'), h('div', { class: 's' }, 'Taking equipment to a site'))),
-        h('button', { class: 'big in', onclick: () => startMode('in', { mine: true }) }, h('span', { class: 'ic' }, '📥'), h('span', null, h('div', { class: 't' }, 'Return'), h('div', { class: 's' }, 'Bringing equipment back')))),
-      h('div', { class: 'pills' }, h('span', { class: 'pill ok' }, h('b', null, n('available')), ' available'), h('span', { class: 'pill out' }, h('b', null, n('out')), ' signed out'),
-        late ? h('span', { class: 'pill warn' }, h('b', null, late), ' overdue') : null, n('maintenance') ? h('span', { class: 'pill' }, h('b', null, n('maintenance')), ' in repair') : null),
-      h('button', { class: 'btn ghost', style: 'width:100%', onclick: openScanner }, '📷  Scan a QR label to start'),
-      h('p', { class: 'muted', style: 'text-align:center;margin-top:18px;font-size:.9rem' }, 'No login needed. Tip: scanning a label with your phone’s camera also adds that item.'));
+        h('button', { class: 'big out', onclick: () => startMode('out') }, h('span', { class: 'ic' }, U.icon('out', 30)), h('span', { class: 'txt' }, h('div', { class: 't' }, 'Sign out'), h('div', { class: 's' }, 'Taking equipment to a site'))),
+        h('button', { class: 'big in', onclick: () => startMode('in', { mine: true }) }, h('span', { class: 'ic' }, U.icon('in', 30)), h('span', { class: 'txt' }, h('div', { class: 't' }, 'Return'), h('div', { class: 's' }, 'Bringing equipment back')))),
+      h('div', { class: 'kpis', role: 'group', 'aria-label': 'Fleet status' },
+        kpi('ok', n('available'), 'Available'), kpi('out', n('out'), 'Signed out'), kpi(late ? 'warn' : '', late, 'Overdue'), kpi('', n('maintenance'), 'In repair')),
+      h('button', { class: 'scanrow', onclick: openScanner }, U.icon('scan', 22), h('span', null, 'Scan a QR label to start')),
+      h('p', { class: 'foot' }, 'No login needed. Scanning a label with your phone’s camera also adds that item.'));
   }
   function renderFlow() {
     S.el.details = h('div'); S.el.picker = h('div');

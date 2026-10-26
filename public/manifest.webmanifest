@@ -1,23 +1,66 @@
 {
   "id": "/",
-  "name": "Equipment Sign-Out",
+  "name": "SaLUT Equipment Sign-In Sign-Out",
   "short_name": "Sign-Out",
   "description": "Sign field equipment out and back in. No login needed.",
   "start_url": "/?source=app",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "any",
   "background_color": "#f3f6fb",
   "theme_color": "#ffffff",
-  "categories": ["business", "productivity"],
+  "categories": [
+    "business",
+    "productivity"
+  ],
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ],
   "shortcuts": [
-    { "name": "Sign out equipment", "short_name": "Sign out", "url": "/?start=out", "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
-    { "name": "Return equipment", "short_name": "Return", "url": "/?start=in", "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }] }
+    {
+      "name": "Sign out equipment",
+      "short_name": "Sign out",
+      "url": "/?start=out",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Return equipment",
+      "short_name": "Return",
+      "url": "/?start=in",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }
