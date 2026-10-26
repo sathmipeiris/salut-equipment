@@ -3,7 +3,11 @@ services:
     name: salut-equipment
     runtime: docker
     plan: free
-    healthCheckPath: /
+    healthCheckPath: /api/health
     envVars:
       - key: ADMIN_PIN
         sync: false        # you type this in the Render dashboard
+      - key: TURSO_DATABASE_URL
+        sync: false        # e.g. libsql://salut-equipment-yourname.turso.io
+      - key: TURSO_AUTH_TOKEN
+        sync: false

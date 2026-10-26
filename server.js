@@ -30,21 +30,22 @@ function makeLimiter() {
 const hashPin = (pin, salt = crypto.randomBytes(16).toString('hex')) => `${salt}$${crypto.scryptSync(pin, salt, 32).toString('hex')}`;
 function checkPin(pin, stored) {
   const [salt, hash] = String(stored).split('$');
+  if (!salt || !hash || !/^[0-9a-f]{64}$/i.test(hash)) return false;
   const a = crypto.scryptSync(String(pin), salt, 32); const b = Buffer.from(hash, 'hex');
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
-const getSetting = (db, k) => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value;
-const setSetting = (db, k, v) => db.prepare('INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(k, v);
+const getSetting = async (db, k) => (await db.get('SELECT value FROM settings WHERE key=?', [k]))?.value;
+const setSetting = (db, k, v) => db.run('INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', [k, v]);
 
-function ensureSecrets(db, log) {
+async function ensureSecrets(db, log) {
   let announced = null;
-  if (process.env.ADMIN_PIN) setSetting(db, 'admin_pin', hashPin(process.env.ADMIN_PIN));
-  else if (!getSetting(db, 'admin_pin')) {
+  if (process.env.ADMIN_PIN) await setSetting(db, 'admin_pin', hashPin(process.env.ADMIN_PIN));
+  else if (!(await getSetting(db, 'admin_pin'))) {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     announced = Array.from(crypto.randomBytes(8), (b) => alphabet[b % alphabet.length]).join('');
-    setSetting(db, 'admin_pin', hashPin(announced));
+    await setSetting(db, 'admin_pin', hashPin(announced));
   }
-  if (!getSetting(db, 'feed_token')) setSetting(db, 'feed_token', crypto.randomBytes(24).toString('hex'));
+  if (!(await getSetting(db, 'feed_token'))) await setSetting(db, 'feed_token', crypto.randomBytes(24).toString('hex'));
   if (announced) log(`\n  First start — generated ADMIN PIN: ${announced}\n  (set ADMIN_PIN in the environment to choose your own; change it any time in Admin → Settings)\n`);
 }
 
@@ -70,18 +71,18 @@ function createApp(db, opts = {}) {
 
   /* --- sessions --- */
   const cookieOf = (req, name) => (req.headers.cookie || '').split(';').map((s) => s.trim().split('=')).find(([k]) => k === name)?.[1];
-  function session(req) {
+  async function session(req) {
     const tok = cookieOf(req, 'sid'); if (!tok) return null;
-    const row = db.prepare('SELECT * FROM sessions WHERE token_hash=?').get(svc.sha(tok));
+    const row = await db.get('SELECT * FROM sessions WHERE token_hash=?', [svc.sha(tok)]);
     if (!row || row.expires_at < Date.now()) return null;
     return row;
   }
-  const requireAdmin = (req) => { const s = session(req); if (!s) throw new HttpError(401, 'Administrator sign-in required.'); return s.actor; };
-  const feedAuth = (req, url) => {
+  const requireAdmin = async (req) => { const s = await session(req); if (!s) throw new HttpError(401, 'Administrator sign-in required.'); return s.actor; };
+  const feedAuth = async (req, url) => {
     const t = (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || url.searchParams.get('token') || '';
-    const real = getSetting(db, 'feed_token');
+    const real = await getSetting(db, 'feed_token');
     if (!t || t.length !== real.length || !crypto.timingSafeEqual(Buffer.from(t), Buffer.from(real))) {
-      if (!session(req)) throw new HttpError(401, 'Valid feed token required.');
+      if (!(await session(req))) throw new HttpError(401, 'Valid feed token required.');
     }
   };
 
@@ -112,7 +113,7 @@ function createApp(db, opts = {}) {
     if (m === 'GET' && p === '/api/health') return send(res, 200, { ok: true, time: svc.nowIso() });
     if (m === 'GET' && p === '/api/bootstrap') {
       if (bootCache.rev !== svc.getRev()) {
-        const body = JSON.stringify(svc.bootstrap(db));
+        const body = JSON.stringify(await svc.bootstrap(db));
         bootCache = { rev: svc.getRev(), body, etag: `"${crypto.createHash('sha1').update(body).digest('hex').slice(0, 16)}"` };
       }
       const h = { ETag: bootCache.etag, 'Cache-Control': 'no-cache' };
@@ -120,73 +121,75 @@ function createApp(db, opts = {}) {
       return send(res, 200, bootCache.body, { ...h, 'Content-Type': 'application/json; charset=utf-8' });
     }
     if (m === 'POST' && p === '/api/transactions') {
-      const out = svc.createTransaction(db, await readJson(req), { device: req.headers['user-agent'] });
+      const out = await svc.createTransaction(db, await readJson(req), { device: req.headers['user-agent'] });
       return send(res, out.replay ? 200 : 201, { ok: true, ...out });
     }
     if (m === 'POST' && p === '/api/undo') {
       if (!limit(`undo:${ip}`, 30, 60_000)) throw new HttpError(429, 'Too many attempts.');
       const b = await readJson(req);
-      return send(res, 200, { ok: true, ...svc.voidTransaction(db, { public_id: String(b.public_id || '') }, { undoToken: String(b.undo_token || '') }) });
+      return send(res, 200, { ok: true, ...(await svc.voidTransaction(db, { public_id: String(b.public_id || '') }, { undoToken: String(b.undo_token || '') })) });
     }
 
     /* ----- admin auth ----- */
     if (m === 'POST' && p === '/api/admin/login') {
       if (!limit(`login:${ip}`, 8, 10 * 60_000)) throw new HttpError(429, 'Too many sign-in attempts. Try again in a few minutes.');
       const b = await readJson(req);
-      if (!checkPin(svc.clean(b.pin, 64), getSetting(db, 'admin_pin'))) throw new HttpError(401, 'Incorrect PIN.');
+      if (!checkPin(svc.clean(b.pin, 64), await getSetting(db, 'admin_pin'))) throw new HttpError(401, 'Incorrect PIN.');
       const tok = crypto.randomBytes(32).toString('hex'); const hours = 10;
-      db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now());
+      await db.run('DELETE FROM sessions WHERE expires_at < ?', [Date.now()]);
       const actor = svc.clean(b.name, 60) || 'Administrator';
-      db.prepare('INSERT INTO sessions(token_hash,actor,expires_at) VALUES (?,?,?)').run(svc.sha(tok), actor, Date.now() + hours * 3600_000);
-      svc.audit(db, actor, 'admin_login', ip);
-      return send(res, 200, { ok: true, actor }, { 'Set-Cookie': `sid=${tok}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${hours * 3600}${secureCookie ? '; Secure' : ''}` });
+      await db.run('INSERT INTO sessions(token_hash,actor,expires_at) VALUES (?,?,?)', [svc.sha(tok), actor, Date.now() + hours * 3600_000]);
+      await svc.audit(db, actor, 'admin_login', ip);
+      const httpsRequest = req.socket.encrypted || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase() === 'https';
+      const secure = secureCookie && httpsRequest;
+      return send(res, 200, { ok: true, actor }, { 'Set-Cookie': `sid=${tok}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${hours * 3600}${secure ? '; Secure' : ''}` });
     }
     if (m === 'POST' && p === '/api/admin/logout') {
-      const tok = cookieOf(req, 'sid'); if (tok) db.prepare('DELETE FROM sessions WHERE token_hash=?').run(svc.sha(tok));
+      const tok = cookieOf(req, 'sid'); if (tok) await db.run('DELETE FROM sessions WHERE token_hash=?', [svc.sha(tok)]);
       return send(res, 200, { ok: true }, { 'Set-Cookie': 'sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
     }
-    if (m === 'GET' && p === '/api/admin/me') { const s = session(req); return send(res, s ? 200 : 401, s ? { actor: s.actor } : { error: 'Not signed in.' }); }
+    if (m === 'GET' && p === '/api/admin/me') { const s = await session(req); return send(res, s ? 200 : 401, s ? { actor: s.actor } : { error: 'Not signed in.' }); }
 
     /* ----- read-only feed for dashboards (Power BI / Excel Power Query / SharePoint) ----- */
     if (m === 'GET' && p.startsWith('/api/feed/')) {
-      feedAuth(req, url);
-      if (p === '/api/feed/equipment.json') return send(res, 200, { generated_at: svc.nowIso(), equipment: svc.equipmentFeed(db) });
-      if (p === '/api/feed/equipment.csv') return send(res, 200, svc.toCsv(svc.EQUIPMENT_COLS, svc.equipmentFeed(db)), { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="equipment-status.csv"' });
-      if (p === '/api/feed/transactions.csv') return send(res, 200, svc.toCsv(svc.TXN_COLS, svc.listTransactions(db, { limit: 500, offset: 0 })), { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="transactions.csv"' });
+      await feedAuth(req, url);
+      if (p === '/api/feed/equipment.json') return send(res, 200, { generated_at: svc.nowIso(), equipment: await svc.equipmentFeed(db) });
+      if (p === '/api/feed/equipment.csv') return send(res, 200, svc.toCsv(svc.EQUIPMENT_COLS, await svc.equipmentFeed(db)), { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="equipment-status.csv"' });
+      if (p === '/api/feed/transactions.csv') return send(res, 200, svc.toCsv(svc.TXN_COLS, await svc.listTransactions(db, { limit: 500, offset: 0 })), { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="transactions.csv"' });
       throw new HttpError(404, 'Unknown feed.');
     }
 
     /* ----- everything below needs an admin session ----- */
     if (!p.startsWith('/api/admin/')) throw new HttpError(404, 'Not found.');
-    const actor = requireAdmin(req);
+    const actor = await requireAdmin(req);
     let mm;
 
-    if (m === 'GET' && p === '/api/admin/overview') return send(res, 200, svc.overview(db));
-    if (m === 'GET' && p === '/api/admin/equipment') return send(res, 200, { equipment: svc.allEquipment(db), categories: svc.lookupList(db, 'categories'), locations: svc.lookupList(db, 'locations') });
-    if (m === 'POST' && p === '/api/admin/equipment') return send(res, 201, { ok: true, ...svc.createEquipment(db, await readJson(req), actor) });
-    if (m === 'POST' && p === '/api/admin/equipment/import') return send(res, 200, { ok: true, ...svc.importEquipment(db, (await readJson(req)).rows, actor) });
-    if (m === 'PUT' && (mm = p.match(/^\/api\/admin\/equipment\/([A-Za-z0-9-]+)$/))) return send(res, 200, svc.updateEquipment(db, mm[1].toUpperCase(), await readJson(req), actor));
-    if (m === 'POST' && (mm = p.match(/^\/api\/admin\/equipment\/([A-Za-z0-9-]+)\/status$/))) return send(res, 200, svc.adjustStatus(db, mm[1].toUpperCase(), await readJson(req), actor));
-    if (m === 'GET' && p === '/api/admin/transactions') return send(res, 200, { transactions: svc.listTransactions(db, { q: url.searchParams.get('q'), limit: url.searchParams.get('limit'), offset: url.searchParams.get('offset') }) });
+    if (m === 'GET' && p === '/api/admin/overview') return send(res, 200, await svc.overview(db));
+    if (m === 'GET' && p === '/api/admin/equipment') return send(res, 200, { equipment: await svc.allEquipment(db), categories: await svc.lookupList(db, 'categories'), locations: await svc.lookupList(db, 'locations') });
+    if (m === 'POST' && p === '/api/admin/equipment') return send(res, 201, { ok: true, ...(await svc.createEquipment(db, await readJson(req), actor)) });
+    if (m === 'POST' && p === '/api/admin/equipment/import') return send(res, 200, { ok: true, ...(await svc.importEquipment(db, (await readJson(req)).rows, actor)) });
+    if (m === 'PUT' && (mm = p.match(/^\/api\/admin\/equipment\/([A-Za-z0-9-]+)$/))) return send(res, 200, await svc.updateEquipment(db, mm[1].toUpperCase(), await readJson(req), actor));
+    if (m === 'POST' && (mm = p.match(/^\/api\/admin\/equipment\/([A-Za-z0-9-]+)\/status$/))) return send(res, 200, await svc.adjustStatus(db, mm[1].toUpperCase(), await readJson(req), actor));
+    if (m === 'GET' && p === '/api/admin/transactions') return send(res, 200, { transactions: await svc.listTransactions(db, { q: url.searchParams.get('q'), limit: url.searchParams.get('limit'), offset: url.searchParams.get('offset') }) });
     if (m === 'POST' && (mm = p.match(/^\/api\/admin\/transactions\/(\d+)\/void$/))) {
       const b = await readJson(req);
       if (svc.clean(b.reason, 300).length < 3) throw new HttpError(400, 'Please give a short reason.');
-      return send(res, 200, { ok: true, ...svc.voidTransaction(db, { id: Number(mm[1]) }, { actor, reason: b.reason }) });
+      return send(res, 200, { ok: true, ...(await svc.voidTransaction(db, { id: Number(mm[1]) }, { actor, reason: b.reason })) });
     }
-    if (m === 'GET' && p === '/api/admin/audit') return send(res, 200, { audit: db.prepare('SELECT at,actor,action,detail FROM audit ORDER BY id DESC LIMIT 200').all() });
-    if (m === 'GET' && p === '/api/admin/settings') return send(res, 200, { feed_token: getSetting(db, 'feed_token') });
-    if (m === 'POST' && p === '/api/admin/settings/rotate-feed-token') { const t = crypto.randomBytes(24).toString('hex'); setSetting(db, 'feed_token', t); svc.audit(db, actor, 'rotate_feed_token'); return send(res, 200, { feed_token: t }); }
+    if (m === 'GET' && p === '/api/admin/audit') return send(res, 200, { audit: await db.all('SELECT at,actor,action,detail FROM audit ORDER BY id DESC LIMIT 200') });
+    if (m === 'GET' && p === '/api/admin/settings') return send(res, 200, { feed_token: await getSetting(db, 'feed_token') });
+    if (m === 'POST' && p === '/api/admin/settings/rotate-feed-token') { const t = crypto.randomBytes(24).toString('hex'); await setSetting(db, 'feed_token', t); await svc.audit(db, actor, 'rotate_feed_token'); return send(res, 200, { feed_token: t }); }
     if (m === 'POST' && p === '/api/admin/settings/pin') {
       const b = await readJson(req);
-      if (!checkPin(svc.clean(b.current, 64), getSetting(db, 'admin_pin'))) throw new HttpError(403, 'Current PIN is incorrect.');
+      if (!checkPin(svc.clean(b.current, 64), await getSetting(db, 'admin_pin'))) throw new HttpError(403, 'Current PIN is incorrect.');
       const next = svc.clean(b.next, 64); if (next.length < 6) throw new HttpError(400, 'Use at least 6 characters.');
-      setSetting(db, 'admin_pin', hashPin(next)); db.prepare('DELETE FROM sessions WHERE token_hash != ?').run(svc.sha(cookieOf(req, 'sid'))); svc.audit(db, actor, 'change_pin');
+      await setSetting(db, 'admin_pin', hashPin(next)); await db.run('DELETE FROM sessions WHERE token_hash != ?', [svc.sha(cookieOf(req, 'sid'))]); await svc.audit(db, actor, 'change_pin');
       return send(res, 200, { ok: true });
     }
     if ((mm = p.match(/^\/api\/admin\/(employees|projects|locations|categories)(?:\/(\d+))?$/))) {
-      if (m === 'GET' && !mm[2]) return send(res, 200, { rows: svc.lookupList(db, mm[1]) });
-      if (m === 'POST' && !mm[2]) return send(res, 201, svc.lookupCreate(db, mm[1], await readJson(req), actor));
-      if (m === 'PUT' && mm[2]) return send(res, 200, svc.lookupUpdate(db, mm[1], mm[2], await readJson(req), actor));
+      if (m === 'GET' && !mm[2]) return send(res, 200, { rows: await svc.lookupList(db, mm[1]) });
+      if (m === 'POST' && !mm[2]) return send(res, 201, await svc.lookupCreate(db, mm[1], await readJson(req), actor));
+      if (m === 'PUT' && mm[2]) return send(res, 200, await svc.lookupUpdate(db, mm[1], mm[2], await readJson(req), actor));
     }
     throw new HttpError(404, 'Not found.');
   }
@@ -208,17 +211,19 @@ function createApp(db, opts = {}) {
 module.exports = { createApp, ensureSecrets };
 
 if (require.main === module) {
-  const PORT = Number(process.env.PORT) || 3000;
-  const file = process.env.DB_FILE || path.join(__dirname, 'data', 'equipment.db');
-  const db = open(file);
-  ensureSecrets(db, console.log);
-  if (db.prepare('SELECT count(*) AS n FROM categories').get().n === 0) {
-    if (process.env.DEMO_DATA === '0') { seedBase(db); console.log('  Empty inventory (DEMO_DATA=0). Add equipment in Admin → Inventory → Add / bulk add.'); }
-    else { seedDemo(db); console.log('  Loaded SAMPLE data (fictional). Set DEMO_DATA=0 on a fresh database to start empty.'); }
-  }
-  createApp(db).listen(PORT, process.env.HOST || '0.0.0.0', () => {
-    console.log(`  Equipment Sign-Out running:\n    Staff  →  http://localhost:${PORT}/\n    Admin  →  http://localhost:${PORT}/admin\n    Kiosk  →  http://localhost:${PORT}/?kiosk=1\n`);
-  });
-  const stop = () => { try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); db.close(); } catch { /* ignore */ } process.exit(0); };
-  process.on('SIGINT', stop); process.on('SIGTERM', stop);
+  (async () => {
+    const PORT = Number(process.env.PORT) || 3000;
+    const target = process.env.TURSO_DATABASE_URL || process.env.DB_FILE || path.join(__dirname, 'data', 'equipment.db');
+    const db = await open(target, process.env.TURSO_AUTH_TOKEN);
+    await ensureSecrets(db, console.log);
+    if ((await db.get('SELECT count(*) AS n FROM categories')).n === 0) {
+      if (process.env.DEMO_DATA === '0') { await seedBase(db); console.log('  Empty inventory (DEMO_DATA=0). Add equipment in Admin → Inventory → Add / bulk add.'); }
+      else { await seedDemo(db); console.log('  Loaded SAMPLE data (fictional). Set DEMO_DATA=0 on a fresh database to start empty.'); }
+    }
+    createApp(db).listen(PORT, process.env.HOST || '0.0.0.0', () => {
+      console.log(`  Database: ${db.isLocal ? 'local file' : 'cloud (Turso)'}\n  Equipment Sign-Out running:\n    Staff  →  http://localhost:${PORT}/\n    Admin  →  http://localhost:${PORT}/admin\n    Kiosk  →  http://localhost:${PORT}/?kiosk=1\n`);
+    });
+    const stop = async () => { try { if (db.isLocal) await db.run('PRAGMA wal_checkpoint(TRUNCATE)'); db.close(); } catch { /* ignore */ } process.exit(0); };
+    process.on('SIGINT', stop); process.on('SIGTERM', stop);
+  })().catch((e) => { console.error(e); process.exit(1); });
 }

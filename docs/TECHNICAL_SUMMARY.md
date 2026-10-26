@@ -1,13 +1,13 @@
 # Technical summary
 
 ## Approach
-A single small web server serves two browser apps (staff, admin) and a JSON/CSV API. Everything runs from one Node.js process and one SQLite file. No build step, no npm dependencies (two small MIT/Apache-2.0 QR libraries are vendored in `public/vendor/`).
+A single small web server serves two browser apps (staff, admin) and a JSON/CSV API. Everything runs from one Node.js process. Data is in a SQLite-compatible database: a local file by default, or a free Turso (libSQL) cloud database so it survives restarts on free hosting. No build step; one npm dependency (`@libsql/client`, MIT); two small QR libraries are vendored in `public/vendor/`.
 
 ## Technology choices
 | Layer | Choice | Reason |
 |---|---|---|
-| Runtime | Node.js ≥ 22.13 | Built-in SQLite (`node:sqlite`), built-in test runner, built-in HTTP. Free. |
-| Database | SQLite (WAL mode) | One file, transactional, trivial backup, plenty for this load. |
+| Runtime | Node.js ≥ 20 | Built-in test runner and HTTP server. Free. |
+| Database | libSQL (SQLite dialect) via `@libsql/client`: local file or Turso cloud | Same SQL both ways. Free tier is 5 GB. Writes are serialised in-process and run in write transactions. |
 | Front end | Vanilla JS + CSS, installable web app (PWA manifest + service worker) | No framework to maintain; works on every device; offline shell. |
 | QR | `qrcode-generator` (print), `jsQR` or native `BarcodeDetector` (scan) | Free, runs in the browser, no cloud service. |
 | Auth (admin) | PIN → session cookie | Simple for a small team; no accounts for staff. |

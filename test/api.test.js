@@ -5,12 +5,13 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { DatabaseSync } = require('node:sqlite');
+const { createClient } = require('@libsql/client');
 const { open } = require('../lib/db');
 const { createApp, ensureSecrets } = require('../server');
 const { seedDemo } = require('../lib/seed');
 
-let server, base, db;
+let server, base, db, dbFile;
+const rmDb = (f) => { for (const s of ['', '-wal', '-shm']) fs.rmSync(f + s, { force: true }); };
 const PIN = 'test-pin-1234';
 const post = (p, body, headers = {}) => fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
 const txn = (over) => ({ kind: 'out', idem_key: crypto.randomUUID(), employee: 'Test User', project_code: '26-101', requester: 'Pat Rivera', location: '1818', items: [], ...over });
@@ -21,14 +22,16 @@ const adminCookie = async () => (await post('/api/admin/login', { pin: PIN, name
 
 before(async () => {
   process.env.ADMIN_PIN = PIN;
-  db = open(':memory:');
-  ensureSecrets(db, () => {});
-  seedDemo(db);
+  dbFile = path.join(os.tmpdir(), `salut-test-${process.pid}.db`);
+  rmDb(dbFile);
+  db = await open(dbFile);
+  await ensureSecrets(db, () => {});
+  await seedDemo(db);
   server = createApp(db).listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
-after(() => { server.close(); db.close(); });
+after(() => { server.close(); db.close(); rmDb(dbFile); });
 
 test('sample fleet mirrors the real tags (S01–S40, D01–D25, F01–F26) and pages are served', async () => {
   const b = await boot();
@@ -69,12 +72,22 @@ test('double sign-out is rejected with a clear conflict and changes nothing', as
   assert.equal(unknown.status, 409);
 });
 
+test('bootstrap returns current database holders for signed-out equipment', async () => {
+  const employee = 'Database Holder';
+  assert.equal((await post('/api/transactions', txn({ employee, items: ids('F25') }))).status, 201);
+  const item = (await boot()).equipment.find((e) => e.id === 'F25');
+  assert.equal(item.status, 'out');
+  assert.equal(item.holder, employee);
+  assert.equal(item.project_code, '26-101');
+  assert.equal(item.project_name, 'Maple Court Senior Apartments');
+});
+
 test('idempotency: the same request id never creates a second transaction', async () => {
   const body = txn({ items: ids('S07') });
   const r1 = await post('/api/transactions', body); const r2 = await post('/api/transactions', body);
   assert.equal(r1.status, 201); assert.equal(r2.status, 200);
   assert.equal((await r2.json()).replay, true);
-  assert.equal(db.prepare('SELECT count(*) n FROM transactions WHERE idem_key=?').get(body.idem_key).n, 1);
+  assert.equal((await db.get('SELECT count(*) n FROM transactions WHERE idem_key=?', [body.idem_key])).n, 1);
 });
 
 test('race: 25 simultaneous attempts on one item → exactly one winner', async () => {
@@ -181,7 +194,7 @@ test('admin: void blocked by newer activity, allowed when safe; corrections are 
   assert.equal((await A('/api/admin/equipment/F22/status', { status: 'available' })).status, 400);
   assert.equal((await A('/api/admin/equipment/F22/status', { status: 'available', reason: 'found on shelf', location: 'Cottontail' })).status, 200);
   assert.equal((await status('F22')).status, 'available');
-  assert.ok(db.prepare("SELECT count(*) n FROM audit WHERE action='adjust_status'").get().n >= 1);
+  assert.ok((await db.get("SELECT count(*) n FROM audit WHERE action='adjust_status'")).n >= 1);
 });
 
 test('admin: add equipment (bulk) continues the numbering; category prefix is immutable', async () => {
@@ -219,9 +232,9 @@ test('admin: CSV import accepts the old inventory-tab layout, skips existing IDs
 
 test('feed: needs token; CSV neutralises spreadsheet formulas and includes the new fields', async () => {
   assert.equal((await fetch(base + '/api/feed/equipment.csv')).status, 401);
-  const token = db.prepare("SELECT value FROM settings WHERE key='feed_token'").get().value;
-  db.prepare("UPDATE equipment SET status='out', holder=? WHERE id='F30'").run('x');   // no F30 → no-op, keeps test independent
-  db.prepare("UPDATE equipment SET status='out', holder=? WHERE id='F29'").run('=HYPERLINK("http://evil")');
+  const token = (await db.get("SELECT value FROM settings WHERE key='feed_token'")).value;
+  await db.run("UPDATE equipment SET status='out', holder=? WHERE id='F30'", ['x']);   // no F30 → no-op, keeps test independent
+  await db.run("UPDATE equipment SET status='out', holder=? WHERE id='F29'", ['=HYPERLINK("http://evil")']);
   const csv = await (await fetch(`${base}/api/feed/equipment.csv?token=${token}`)).text();
   assert.ok(csv.split('\r\n')[0].includes('unit'));
   assert.ok(!/,=HYPERLINK/.test(csv));
@@ -229,20 +242,21 @@ test('feed: needs token; CSV neutralises spreadsheet formulas and includes the n
   const tcsv = await (await fetch(`${base}/api/feed/transactions.csv?token=${token}`)).text();
   assert.ok(tcsv.split('\r\n')[0].includes('other_devices') && tcsv.split('\r\n')[0].includes('requester'));
   const json = await (await fetch(`${base}/api/feed/equipment.json`, { headers: { authorization: `Bearer ${token}` } })).json();
-  assert.equal(json.equipment.length, db.prepare('SELECT count(*) n FROM equipment').get().n);
+  assert.equal(json.equipment.length, (await db.get('SELECT count(*) n FROM equipment')).n);
 });
 
-test('databases created by the first release are upgraded in place', () => {
+test('databases created by the first release are upgraded in place', async () => {
   const file = path.join(os.tmpdir(), `salut-migrate-${process.pid}.db`);
-  const old = new DatabaseSync(file);
-  old.exec(`CREATE TABLE equipment(id TEXT PRIMARY KEY, category_id INTEGER, name TEXT, serial TEXT, notes TEXT, status TEXT, txn_id INTEGER, holder TEXT, project_code TEXT, project_name TEXT, site TEXT, location TEXT, due_date TEXT, out_at TEXT, issue TEXT, updated_at TEXT);
+  rmDb(file);
+  const old = createClient({ url: `file:${file}` });
+  await old.executeMultiple(`CREATE TABLE equipment(id TEXT PRIMARY KEY, category_id INTEGER, name TEXT, serial TEXT, notes TEXT, status TEXT, txn_id INTEGER, holder TEXT, project_code TEXT, project_name TEXT, site TEXT, location TEXT, due_date TEXT, out_at TEXT, issue TEXT, updated_at TEXT);
     CREATE TABLE transactions(id INTEGER PRIMARY KEY, public_id TEXT, idem_key TEXT, kind TEXT, employee TEXT, project_code TEXT, project_name TEXT, requester TEXT, site TEXT, location TEXT, due_date TEXT, notes TEXT, created_at TEXT, client_time TEXT, device TEXT, undo_hash TEXT, voided_at TEXT, voided_by TEXT, void_reason TEXT);`);
   old.close();
-  const upgraded = open(file);
-  const cols = (t) => upgraded.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name);
-  assert.ok(cols('equipment').includes('unit') && cols('transactions').includes('unit') && cols('transactions').includes('other_devices'));
+  const upgraded = await open(file);
+  const cols = async (t) => (await upgraded.all(`PRAGMA table_info(${t})`)).map((c) => c.name);
+  assert.ok((await cols('equipment')).includes('unit') && (await cols('transactions')).includes('unit') && (await cols('transactions')).includes('other_devices'));
   upgraded.close();
-  for (const s of ['', '-wal', '-shm']) fs.rmSync(file + s, { force: true });
+  rmDb(file);
 });
 
 test('security headers present, API not cacheable', async () => {

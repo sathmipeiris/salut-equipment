@@ -39,7 +39,7 @@ The brief asks for no additional recurring cost and mentions existing M365, Chat
 
 - no licences, no per-user fees, no database service to rent;
 - one file to back up, nothing to administer;
-- zero npm dependencies, so nothing to patch or break on update;
+- one small npm dependency (`@libsql/client`) so the same code runs on a local file or a free cloud database; everything else is built in;
 - it can still **feed** M365/Power BI (see the Technical Summary), so the existing subscriptions are used where they are strong (dashboards) rather than forced into an unsuitable role.
 
 The honest trade-off is **hosting**: it needs a computer that stays on. See "Hosting and cost" in the Technical Summary for the no-cost options and the ones that cost money.
@@ -52,7 +52,7 @@ I considered and rejected: a SharePoint List + Power Apps app (per-user licensin
 
 | Concern | Today | If SaLUT grows (e.g. 5,000 items, many warehouses) |
 |---|---|---|
-| Throughput | SQLite in WAL mode handles thousands of writes/sec; this app needs a few per minute. | Swap to PostgreSQL; business logic is isolated in `lib/service.js`, writes are already single transactions. |
+| Throughput | SQLite in WAL mode handles thousands of writes/sec; this app needs a few per minute. | Swap to PostgreSQL if ever needed; business logic is isolated in `lib/service.js`, writes are already single transactions. |
 | Concurrency correctness | Serialised write transactions; tested race. | Same logic via `SELECT … FOR UPDATE` or a conditional `UPDATE … WHERE status='available'`. |
 | Duplicate / retried requests | Idempotency keys. | Unchanged. This is the key property that makes multi-instance and unreliable networks safe. |
 | Stateless app tier | Sessions in the DB, no in-memory state except a read cache and rate limiter. | Move those two to Redis (or drop them) and run N instances behind a load balancer. |

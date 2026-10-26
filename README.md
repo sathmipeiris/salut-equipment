@@ -4,15 +4,16 @@ A no-login web app for signing field equipment (air scrubbers `S01`, dehumidifie
 
 - **Staff page** (`/`): no account, works on phones, tablets, kiosks and desktops. Sign out or return many items from any category in one transaction.
 - **Admin console** (`/admin`): PIN-protected. Inventory (add / import), corrections, reversals, QR label printing, people / projects / locations, dashboard feed.
-- **Zero runtime dependencies, zero recurring cost.** Node.js + the SQLite built into Node. Nothing to `npm install`.
+- **Zero recurring cost.** Node.js + one small dependency (`@libsql/client`). Data lives in a local SQLite file, or in a free Turso cloud database so it survives restarts on free hosting.
 
 ## Run it locally (2 minutes)
 
-Requirements: **Node.js 22.13 or newer** (<https://nodejs.org>). Check with `node -v`.
+Requirements: **Node.js 20 or newer** (<https://nodejs.org>). Check with `node -v`.
 
 ```bash
 git clone https://github.com/<your-username>/salut-equipment.git
 cd salut-equipment
+npm install
 npm start
 ```
 
@@ -59,10 +60,12 @@ The staff page installs on phones, tablets and desktops (home-screen icon, full-
 |---|---|---|
 | `PORT` | `3000` | Port to listen on |
 | `ADMIN_PIN` | random on first start | Admin PIN (stored hashed with scrypt) |
-| `DB_FILE` | `data/equipment.db` | Database location |
+| `DB_FILE` | `data/equipment.db` | Local database file |
+| `TURSO_DATABASE_URL` | unset | Use a cloud database instead (`libsql://…`); see [`docs/DEPLOY.md`](docs/DEPLOY.md) |
+| `TURSO_AUTH_TOKEN` | unset | Token for the cloud database |
 | `DEMO_DATA=0` | sample data on | Start a fresh database empty (categories and locations only) |
 | `TZ` | system | Time zone used for "overdue" (e.g. `America/New_York`) |
-| `COOKIE_SECURE=1` | off | Set when served over HTTPS |
+| `COOKIE_SECURE=1` | off | Set when served over HTTPS; the session cookie is marked Secure only for HTTPS requests |
 | `TRUST_PROXY=1` | off | Set behind a reverse proxy / tunnel so rate limits see the real client IP |
 
 ## Using it

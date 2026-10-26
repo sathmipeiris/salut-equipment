@@ -1,14 +1,30 @@
-# Put it online for reviewers (free, ~5 minutes)
+# Put it online for reviewers: free, and the data survives restarts
 
-Uses Render's free tier. The demo database resets when the service restarts, which is fine for a demo: sample data reloads automatically.
+Two free services: **Turso** (the database, 5 GB free, no card) and **Render** (the web server). The server can sleep and restart as often as it likes; everything lives in Turso.
 
-1. Push this repo to GitHub (see README).
-2. Sign in at https://render.com with GitHub → **New → Blueprint** → pick the repo. It reads `render.yaml`.
-3. When asked, set **ADMIN_PIN** to something you can share with interviewers (e.g. `demo-2026`).
-4. After the build, Render gives you `https://salut-equipment.onrender.com`. Staff page at `/`, admin at `/admin`.
+## 1. Create the free database (Turso)
+1. Sign up at https://turso.tech (GitHub login works). Create a database, e.g. `salut-equipment`.
+2. On the database page copy the **URL** (`libsql://salut-equipment-<you>.turso.io`).
+3. Create a **token** (Database → Generate token, read & write). Copy it.
+
+## 2. Deploy the server (Render)
+1. Push this repo to GitHub.
+2. https://render.com → **New → Blueprint** → pick the repo (it reads `render.yaml`).
+3. Fill in the three environment variables: `ADMIN_PIN` (any PIN you will share with interviewers), `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.
+4. First start creates the tables and loads the sample data **once**. After that, restarts keep everything.
+
+Open `https://<your-service>.onrender.com/` (staff) and `/admin`.
 
 Notes
-- Free services sleep after ~15 min idle; the first visit then takes ~30 s. Open it yourself just before an interview.
-- HTTPS is automatic, so camera QR scanning and "Install app" work.
-- For permanent data use a paid plan with a disk mounted at `/app/data`, or Fly.io with a volume.
-- Quick alternative from your own laptop: `npm start` then `cloudflared tunnel --url http://localhost:3000` gives a temporary public https link.
+- Free Render services sleep after ~15 min idle (first visit then takes ~30 s). The data is not affected.
+- If the logs show a WebSocket/connection error, change the URL scheme from `libsql://` to `https://` (same host).
+- To start with an empty inventory instead of sample data, add the variable `DEMO_DATA=0` **before** the first start.
+- To wipe the cloud demo back to sample data: run `TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… npm run seed -- --reset` on your computer.
+- Backups: Turso keeps point-in-time restore in its dashboard, or `turso db shell <name> .dump > backup.sql`.
+- Running more than one server instance needs a shared cache for the bootstrap ETag; one instance is right for this app (see Technical Summary).
+
+## Run locally against the cloud database
+```
+TURSO_DATABASE_URL=libsql://… TURSO_AUTH_TOKEN=… ADMIN_PIN=demo-2026 npm start
+```
+(PowerShell: set `$env:TURSO_DATABASE_URL=...` etc. first.) Without those variables it uses a local file, `data/equipment.db`.

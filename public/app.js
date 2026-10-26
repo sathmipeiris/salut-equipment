@@ -18,9 +18,11 @@
   const S = {
     data: null, byId: new Map(), view: 'home', mode: null,
     cart: new Set(), problems: new Set(), cat: 'all', q: '', showNA: false, mine: false,
-    d: Object.assign(blankDetails(), LS.get('details', {}), { due: '', unit: '' }),
+    // The person using a shared device must be selected for each visit. Keep
+    // project/location convenience fields, but never restore the last person.
+    d: Object.assign(blankDetails(), LS.get('details', {}), { employee: '', due: '', unit: '' }),
     detailsOpen: true, notes: '', other: '', last: null, busy: false, sheet: false, sheetErr: null, attempt: null,
-    queue: LS.get('queue', []), failed: LS.get('failed', []), online: navigator.onLine, el: {}, kioskTimer: null,
+    queue: LS.get('queue', []), failed: LS.get('failed', []), online: navigator.onLine, el: {}, kioskTimer: null, employeeOther: false, returnMine: false,
   };
   if (KIOSK) { S.d.employee = ''; S.d.project = ''; S.d.requester = ''; S.d.site = ''; }
 
@@ -38,7 +40,6 @@
   }
   function applyData(d) {
     S.data = d; S.byId = new Map(d.equipment.map((e) => [e.id, e])); overlayQueue();
-    document.getElementById('dl-emps').replaceChildren(...d.employees.map((n) => h('option', { value: n })));
     document.getElementById('dl-projects').replaceChildren(...d.projects.map((p) => h('option', { value: `${p.code} — ${p.name}` })));
     // drop cart items whose state changed under us (someone else took it, etc.)
     for (const id of [...S.cart]) {
@@ -56,7 +57,7 @@
     const w = S.queue.length; n.textContent = on ? (w ? `Syncing ${w}…` : 'Online') : `Offline${w ? ` · ${w} saved` : ''}`; n.className = `net ${on && !w ? '' : 'off'}`;
   }
   const persistCart = () => LS.set('cart', { mode: S.mode, ids: [...S.cart] });
-  const persistDetails = () => { const { employee, project, requester, site, location } = S.d; LS.set('details', KIOSK ? { location } : { employee, project, requester, site, location }); };
+  const persistDetails = () => { const { project, requester, site, location } = S.d; LS.set('details', KIOSK ? { location } : { project, requester, site, location }); };
 
   /* ================= offline queue ================= */
   let flushing = false;
@@ -76,9 +77,11 @@
 
   /* ================= selection helpers ================= */
   function startMode(mode, opts = {}) {
+    if (S.view !== 'flow' && mode === 'out') { S.d.employee = ''; S.employeeOther = false; }
     if (S.mode !== mode) { S.cart.clear(); S.problems.clear(); S.other = ''; }
     S.mode = mode; S.view = 'flow'; S.cat = 'all'; S.q = ''; S.showNA = false; S.sheet = false; S.notes = '';
-    S.mine = !!(opts.mine && S.d.employee.trim());
+    S.returnMine = mode === 'in' && !!opts.mine;
+    S.mine = S.returnMine && !!S.d.employee.trim();
     S.detailsOpen = !detailsComplete(); persistCart(); render(); window.scrollTo(0, 0);
   }
   function stateFor(id) { const e = S.byId.get(id); return e ? e.status : null; }
@@ -137,7 +140,27 @@
     }
     let okBtn; const sync = () => { if (okBtn) okBtn.disabled = !detailsComplete(); };
     const field = (id, lab, el, hint) => h('div', { class: 'field' }, h('label', { class: 'f', for: id }, lab), el, h('div', { class: 'err', id: `${id}-err`, hidden: true }));
-    const emp = h('input', { type: 'text', id: 'f-emp', list: 'dl-emps', autocomplete: 'off', autocapitalize: 'words', placeholder: 'Start typing your name', value: S.d.employee, oninput: (e) => { S.d.employee = e.target.value; clearErr('f-emp'); sync(); } });
+    const employeeNames = S.data.employees || [];
+    const selectedEmployee = employeeNames.includes(S.d.employee) ? S.d.employee : '';
+    const customEmployee = S.employeeOther || (!selectedEmployee && S.d.employee.length > 0);
+    const employeeSelect = h('select', { id: 'f-emp', value: selectedEmployee, onchange: (e) => {
+      if (e.target.value === '__other__') {
+        S.employeeOther = true;
+        S.d.employee = '';
+        renderDetails();
+        document.getElementById('f-emp-other')?.focus();
+      } else {
+        S.employeeOther = false;
+        S.d.employee = e.target.value;
+        S.mine = S.mode === 'in' && S.returnMine;
+        clearErr('f-emp'); sync();
+      }
+    } },
+      h('option', { value: '' }, 'Choose your name…'),
+      ...employeeNames.map((name) => h('option', { value: name, selected: name === selectedEmployee }, name)),
+      h('option', { value: '__other__', selected: customEmployee }, 'Someone else…'));
+    const customEmployeeInput = h('input', { type: 'text', id: 'f-emp-other', autocomplete: 'off', autocapitalize: 'words', placeholder: 'Type your full name', value: customEmployee ? S.d.employee : '', oninput: (e) => { S.d.employee = e.target.value; S.mine = S.mode === 'in' && S.returnMine; clearErr('f-emp'); sync(); } });
+    const emp = h('div', null, employeeSelect, customEmployee ? h('div', { style: 'margin-top:8px' }, customEmployeeInput) : null);
     const proj = h('input', { type: 'text', id: 'f-proj', list: 'dl-projects', autocomplete: 'off', placeholder: 'Project number or name', value: S.d.project, oninput: (e) => { S.d.project = e.target.value; clearErr('f-proj'); autoSite(); sync(); } });
     const loc = h('select', { id: 'f-loc', onchange: (e) => { S.d.location = e.target.value; clearErr('f-loc'); sync(); } },
       h('option', { value: '' }, 'Choose location…'), ...S.data.locations.map((l) => h('option', { value: l.name, selected: l.name === S.d.location }, l.name)));
@@ -204,7 +227,10 @@
         h('button', { class: `chip ${!S.mine ? 'on' : ''}`, onclick: () => { S.mine = false; renderChips(); renderGrid(); } }, 'Everything signed out', h('span', { class: 'n' }, allN)));
     }
   }
-  const sameName = (a, b) => a && b && a.trim().toLowerCase() === b.trim().toLowerCase();
+  const sameName = (a, b) => {
+  const normalizeName = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  return !!normalizeName(a) && normalizeName(a) === normalizeName(b);
+  };
 
   function renderGrid() {
     if (!S.el.grid || !S.data) return;
