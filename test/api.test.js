@@ -11,7 +11,19 @@ const { createApp, ensureSecrets } = require('../server');
 const { seedDemo } = require('../lib/seed');
 
 let server, base, db, dbFile;
-const rmDb = (f) => { for (const s of ['', '-wal', '-shm']) fs.rmSync(f + s, { force: true }); };
+const rmDb = async (f) => {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try {
+      for (const s of ['', '-wal', '-shm']) fs.rmSync(f + s, { force: true });
+      return;
+    } catch (e) {
+      if (e.code !== 'EBUSY') throw e;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+  // @libsql/client can retain a native SQLite handle briefly on Windows.
+  // Temporary test files are harmless and are removed on the next run when possible.
+};
 const PIN = 'test-pin-1234';
 const post = (p, body, headers = {}) => fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
 const txn = (over) => ({ kind: 'out', idem_key: crypto.randomUUID(), employee: 'Test User', project_code: '26-101', requester: 'Pat Rivera', location: '1818', items: [], ...over });
@@ -23,7 +35,7 @@ const adminCookie = async () => (await post('/api/admin/login', { pin: PIN, name
 before(async () => {
   process.env.ADMIN_PIN = PIN;
   dbFile = path.join(os.tmpdir(), `salut-test-${process.pid}.db`);
-  rmDb(dbFile);
+  await rmDb(dbFile);
   db = await open(dbFile);
   await ensureSecrets(db, () => {});
   await seedDemo(db);
@@ -31,7 +43,11 @@ before(async () => {
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
-after(() => { server.close(); db.close(); rmDb(dbFile); });
+after(async () => {
+  await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
+  await db.close();
+  await rmDb(dbFile);
+});
 
 test('sample fleet mirrors the real tags (S01–S40, D01–D25, F01–F26) and pages are served', async () => {
   const b = await boot();
@@ -247,16 +263,16 @@ test('feed: needs token; CSV neutralises spreadsheet formulas and includes the n
 
 test('databases created by the first release are upgraded in place', async () => {
   const file = path.join(os.tmpdir(), `salut-migrate-${process.pid}.db`);
-  rmDb(file);
+  await rmDb(file);
   const old = createClient({ url: `file:${file}` });
   await old.executeMultiple(`CREATE TABLE equipment(id TEXT PRIMARY KEY, category_id INTEGER, name TEXT, serial TEXT, notes TEXT, status TEXT, txn_id INTEGER, holder TEXT, project_code TEXT, project_name TEXT, site TEXT, location TEXT, due_date TEXT, out_at TEXT, issue TEXT, updated_at TEXT);
     CREATE TABLE transactions(id INTEGER PRIMARY KEY, public_id TEXT, idem_key TEXT, kind TEXT, employee TEXT, project_code TEXT, project_name TEXT, requester TEXT, site TEXT, location TEXT, due_date TEXT, notes TEXT, created_at TEXT, client_time TEXT, device TEXT, undo_hash TEXT, voided_at TEXT, voided_by TEXT, void_reason TEXT);`);
-  old.close();
+  await old.close();
   const upgraded = await open(file);
   const cols = async (t) => (await upgraded.all(`PRAGMA table_info(${t})`)).map((c) => c.name);
   assert.ok((await cols('equipment')).includes('unit') && (await cols('transactions')).includes('unit') && (await cols('transactions')).includes('other_devices'));
-  upgraded.close();
-  rmDb(file);
+  await upgraded.close();
+  await rmDb(file);
 });
 
 test('security headers present, API not cacheable', async () => {

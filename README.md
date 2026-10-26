@@ -6,6 +6,14 @@ A no-login web app for signing field equipment (air scrubbers `S01`, dehumidifie
 - **Admin console** (`/admin`): PIN-protected. Inventory (add / import), corrections, reversals, QR label printing, people / projects / locations, dashboard feed.
 - **Zero recurring cost.** Node.js + one small dependency (`@libsql/client`). Data lives in a local SQLite file, or in a free Turso cloud database so it survives restarts on free hosting.
 
+## Live prototype
+
+- **Staff application:** <https://salut-equipment.onrender.com/>
+- **Admin console:** <https://salut-equipment.onrender.com/admin>
+- **Health check:** <https://salut-equipment.onrender.com/api/health>
+
+The deployed prototype runs on Render's free web service plan and uses Turso/libSQL for persistent database storage. The admin PIN is supplied separately through the Render environment configuration and should not be committed to the repository.
+
 ## Run it locally (2 minutes)
 
 Requirements: **Node.js 20 or newer** (<https://nodejs.org>). Check with `node -v`.
@@ -50,7 +58,7 @@ The staff page installs on phones, tablets and desktops (home-screen icon, full-
 
 | Command | What it does |
 |---|---|
-| `npm test` | Runs 19 automated tests (race conditions, double-submit, auth, CSV import, CSV safety, …) |
+| `npm test` | Runs 20 automated tests (race conditions, double-submit, auth, CSV import, CSV safety, holder lookup, …) |
 | `npm run seed` | Wipes the database and reloads sample data |
 | `npm run backup` | Safe backup while running (keeps newest 30) |
 
@@ -70,7 +78,7 @@ The staff page installs on phones, tablets and desktops (home-screen icon, full-
 
 ## Using it
 
-**Sign out:** *Sign out* → name, where from, project, who requested it, project location, (unit) → tap equipment tiles from any category, or scan QR labels, or type `S01-S08, D03, F12` → *Review* → *Confirm*. Name, location and recent projects are remembered. A 15-minute *Undo* appears afterwards.
+**Sign out:** *Sign out* → choose your name from the list (or type a new name), where from, project, who requested it, project location, (unit) → tap equipment tiles from any category, or scan QR labels, or type `S01-S08, D03, F12` → *Review* → *Confirm*. Location and recent projects are remembered; the person is selected for each visit so shared devices cannot reuse the previous person. A 15-minute *Undo* appears afterwards.
 
 **Return:** *Return* → your signed-out items are listed grouped by project → tick them (or *Select all*) → mark any with a problem → confirm. Project, requester and location come from the original sign-out.
 

@@ -13,7 +13,7 @@ A single small web server serves two browser apps (staff, admin) and a JSON/CSV 
 | Auth (admin) | PIN → session cookie | Simple for a small team; no accounts for staff. |
 
 ## Key features
-Staff: no-login link · sign out / return up to 200 items per transaction · search, category chips, ID-range entry, QR scan · remembers name/location/recent projects · due date · conflict detection · 15-minute undo · offline queue · kiosk mode · problem reporting on return.
+Staff: no-login link · sign out / return up to 200 items per transaction · search, category chips, ID-range entry, QR scan · choose a person for each visit · remembers location/recent projects · due date · conflict detection · 15-minute undo · offline queue · kiosk mode · problem reporting on return.
 Admin: CSV import of the existing inventory sheet · overview (available / out / maintenance, overdue, needs-attention, by-category) · inventory with bulk add and edit · manual status correction with reason · ledger search and reversal · printable QR labels · manage people, projects, locations, categories · audit log · dashboard feed links · CSV export.
 
 ## Data storage
@@ -25,7 +25,22 @@ Fields recorded per transaction (matching the old form): employee, project no./n
 See `DESIGN_DECISIONS.md` §5. In short: hashed PIN, HttpOnly SameSite cookie, rate limiting, CSP, output escaping by construction, server-side validation of everything, formula-safe CSV, rotating read-only feed token, audit log.
 
 ## Hosting and expected ongoing cost
-The software is free. It needs one always-on machine:
+
+### Submitted deployment
+
+The working prototype is deployed at:
+
+- Staff application: <https://salut-equipment.onrender.com/>
+- Admin console: <https://salut-equipment.onrender.com/admin>
+- Health endpoint: <https://salut-equipment.onrender.com/api/health>
+
+The deployment uses a Render web service defined in [`render.yaml`](../render.yaml), built from [`Dockerfile`](../Dockerfile). Render provides HTTPS for the public application. Turso/libSQL is used as the persistent database so Render restarts do not discard transactions.
+
+The software itself is free. Render's free web service may sleep after inactivity, so the first request after a pause can be slower. The health endpoint is suitable for deployment monitoring.
+
+### Other hosting options
+
+The software can also run on one always-on machine:
 
 | Option | Recurring cost | Notes |
 |---|---|---|
@@ -33,7 +48,7 @@ The software is free. It needs one always-on machine:
 | …plus a free tunnel (e.g. Cloudflare Tunnel) for HTTPS and access from job sites | $0 at time of writing (verify current terms) | HTTPS is also what enables in-app camera scanning and the offline service worker. |
 | Small cloud VM / container host | Typically a few dollars per month | Only if no on-site machine is suitable. Prices change; verify before committing. |
 
-Not included and not required: a database service, user licences, SMS/email services.
+Not included and not required: user licences, SMS/email services, or a paid database service. The submitted deployment uses Turso's free database option.
 
 ## Connecting to an equipment-status dashboard
 Admin → Settings shows token-protected, read-only links:
@@ -43,4 +58,4 @@ Admin → Settings shows token-protected, read-only links:
 In **Excel / Power BI**: *Get Data → From Web*, paste the link, set a refresh schedule. Because the existing M365 subscription already includes Excel (and Power BI Desktop is free), this gives a dashboard without extra licences. (Scheduled refresh in the Power BI *service* may need a paid licence and a reachable URL; I have not tested this.) SharePoint/Power Automate or Salesforce could ingest the same feed; I have not built or tested those.
 
 ## Testing
-`npm test` runs 19 automated API tests, including a 25-way simultaneous-request race, idempotent retries, all-or-nothing conflicts, undo tokens, admin authorisation, reversal rules, bulk ID generation, CSV formula safety, required-field rules from the old form, a 90-item transaction, the CSV importer (including all-or-nothing validation) and an in-place upgrade of databases from the first release, and rate limiting. A headless-browser run exercised the staff flow (sign out, return with problem, undo, QR deep link, offline queue and replay), the desktop layout, and every admin tab with no page errors.
+`npm test` runs 20 automated API tests, including a 25-way simultaneous-request race, idempotent retries, all-or-nothing conflicts, holder lookup from the database, undo tokens, admin authorisation, reversal rules, bulk ID generation, CSV formula safety, required-field rules from the old form, a 90-item transaction, the CSV importer (including all-or-nothing validation) and an in-place upgrade of databases from the first release, and rate limiting. A browser smoke run should exercise the staff flow, the desktop layout, and every admin tab before deployment.

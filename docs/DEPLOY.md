@@ -13,7 +13,13 @@ Two free services: **Turso** (the database, 5 GB free, no card) and **Render** (
 3. Fill in the three environment variables: `ADMIN_PIN` (any PIN you will share with interviewers), `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.
 4. First start creates the tables and loads the sample data **once**. After that, restarts keep everything.
 
-Open `https://<your-service>.onrender.com/` (staff) and `/admin`.
+For this submission, the deployed prototype is available at:
+
+- Staff: <https://salut-equipment.onrender.com/>
+- Admin: <https://salut-equipment.onrender.com/admin>
+- Health check: <https://salut-equipment.onrender.com/api/health>
+
+The admin PIN is intentionally not documented in the repository. Share it through a separate secure channel.
 
 Notes
 - Free Render services sleep after ~15 min idle (first visit then takes ~30 s). The data is not affected.

@@ -9,7 +9,7 @@ Field staff are often on a phone, wearing gloves, in poor light, with a truck wa
 | Decision | Why |
 |---|---|
 | **Two giant buttons on the home screen: Sign out / Return** | The only question a person must answer first. No menus, no jargon. |
-| **No login; the name is remembered on that device** | Brief requires link-only access. Typing a name once and never again is faster than any password. Kiosk mode does *not* remember names (shared device). |
+| **No login; the person is selected for each visit** | The brief requires link-only access. An employee dropdown makes repeat selection fast while preventing a shared device from silently reusing the previous person. "Someone else" accepts a new name, which is added for admin review. Kiosk mode also resets the person. |
 | **Tap-to-select tiles with large IDs (S03)** | The ID is what is printed on the equipment, so staff can match by eye. 54 px+ touch targets, 18 px base text, high contrast for sunlight. |
 | **Category chips + live search + "type IDs" box (`FN-1..8, DH-2`)** | Three ways to build a long list quickly, so a 30-item job takes under a minute. This is what removes "excessive scrolling". |
 | **QR labels: scan in-app, or with the phone's own camera** | Each label encodes `https://site/e/S03`. Scanning with any camera opens the app with that item already added. The in-app *Scan* button adds many in a row. |
@@ -30,7 +30,7 @@ Field staff are often on a phone, wearing gloves, in poor light, with a truck wa
 | **Idempotency key per submission** | A double-tap or a retry after a dropped connection can never create two records. This is also what makes offline replay safe. |
 | **Reversal instead of delete** | Admins can reverse a transaction; the original stays visible, struck through, with who/why. Reversal restores the exact prior state of each item and is refused if newer activity has touched an item. |
 | **Manual correction as a recorded transaction** | "Found on the shelf, never returned" is fixed with a required reason, and it appears in the ledger and audit log. |
-| **No 14-device limit** | One transaction accepts up to 100 items (tested with 40). |
+| **No 14-device limit** | One transaction accepts up to 200 items (tested with 90). |
 | **Problem reports on return send the item to Maintenance** | Broken equipment can't be signed out again until an admin marks it repaired. |
 
 ## 3. Cost and feasibility
@@ -85,7 +85,7 @@ I first built from the brief alone, then received the old form's questions and t
 | Old form | New app |
 |---|---|
 | Signing OUT / IN / *Adding Inventory* | Two big buttons. Adding inventory is **admin-only** (Add, or Import CSV): anyone adding items from the staff page risks duplicates and typos in the master list. |
-| Name of person checking out / signing in | "Your name": type-ahead, remembered on the device. |
+| Name of person checking out / signing in | "Your name": choose an active person from the dropdown, or type a new name. The person is not persisted between visits on shared devices. |
 | Signing out / in location (1818, Cottontail) | Required dropdown, "Signing out from" / "Returning to". |
 | Project No and Project Name | One field with type-ahead; free text still allowed ("23-108 DGS IH"). |
 | Project Manager / Who requested (required) | "Requested by", **required** for sign-out. |
