@@ -36,6 +36,8 @@ Everything under "Key features" in `TECHNICAL_SUMMARY.md`. Reconciled with the o
 9. **Single server, single time zone.** Overdue is computed in the server's `TZ`.
 10. Accessibility was designed for (large targets, labels, contrast, focus rings) but not audited with a screen reader.
 
+11. **Microsoft 365, Salesforce, and ChatGPT integrations are documented designs, not completed tenant integrations.** The deployed prototype exposes controlled feeds that could be consumed by Power BI, Power Automate, Salesforce middleware, or approved ChatGPT Business workflows. Tenant permissions, connector availability, data-governance rules, and any separate API licensing must be confirmed before enabling automation.
+
 ## Recommended next steps
 1. Import the real inventory (Admin → Inventory → Import CSV) and resolve the 11 tags the form offered that are missing from the inventory list.
 2. Keep the Render deployment configured with HTTPS, `COOKIE_SECURE=1`, `TRUST_PROXY=1`, a strong `ADMIN_PIN`, and a Turso database token; schedule database backups.

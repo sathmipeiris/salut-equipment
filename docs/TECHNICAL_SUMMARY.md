@@ -57,5 +57,73 @@ Admin → Settings shows token-protected, read-only links:
 
 In **Excel / Power BI**: *Get Data → From Web*, paste the link, set a refresh schedule. Because the existing M365 subscription already includes Excel (and Power BI Desktop is free), this gives a dashboard without extra licences. (Scheduled refresh in the Power BI *service* may need a paid licence and a reachable URL; I have not tested this.) SharePoint/Power Automate or Salesforce could ingest the same feed; I have not built or tested those.
 
+## Microsoft 365, Salesforce, and ChatGPT integration strategy
+
+The deployed application is deliberately the source of truth for equipment movements. Its database transactions provide conflict detection, idempotent retries, and all-or-nothing updates; an Excel workbook or CRM record should not be used as the concurrent checkout mechanism.
+
+### Microsoft 365
+
+The token-protected CSV/JSON feeds can be consumed by:
+
+- Power BI for availability, overdue equipment, maintenance, holder, and project reports.
+- Power Automate for scheduled overdue alerts to Teams or Outlook.
+- SharePoint or Microsoft Lists for a management-facing issue or escalation queue.
+- Teams for a pinned staff-app link, admin link, and dashboard tab.
+
+These are recommended integration designs. They are not represented as completed integrations unless the organization's tenant and licensing are used to configure and test them.
+
+### Salesforce
+
+Salesforce can consume the same feeds through a scheduled integration or a small middleware service. A practical mapping would be:
+
+| SaLUT data | Salesforce destination |
+|---|---|
+| Project code/name/site | Project, Account, or custom Project object |
+| Equipment ID/category/status | Custom Equipment object |
+| Sign-out/return event | Equipment Movement custom object |
+| Holder and due date | Current assignment fields |
+| Maintenance report | Case or maintenance custom object |
+
+For near-real-time updates, the application could publish signed event notifications to a Salesforce-connected middleware endpoint after a committed transaction. The middleware would use the transaction public ID as an idempotency key before creating or updating Salesforce records. For the prototype, the safer and lower-cost option is to consume the read-only CSV/JSON feed rather than adding Salesforce credentials or write access to the app.
+
+Salesforce should remain a downstream CRM/workflow view unless SaLUT specifically requires project and customer data to be mastered there. This keeps equipment availability reliable even when Salesforce is unavailable.
+
+### ChatGPT Business
+
+ChatGPT Business can help staff and managers interpret operational information, for example:
+
+- Explain an overdue-equipment report.
+- Summarize maintenance issues for a supervisor.
+- Draft a weekly equipment-utilization summary.
+- Answer questions about the documented operating procedure.
+
+The safest prototype approach is to export a filtered report or provide a controlled dashboard view for analysis. Do not send the live feed, admin PIN, session cookies, database credentials, or unrestricted personal information to an external model.
+
+ChatGPT Business access and custom connectors are separate from the OpenAI API. A ChatGPT Business subscription should not be described as automatically providing API credits or a production API integration. If SaLUT wants an automated assistant inside Teams, Salesforce, or the application, the organization must confirm the available ChatGPT Business features, data controls, connector support, and any separate API licensing.
+
+### Recommended combined architecture
+
+```text
+Field staff / warehouse kiosk
+            |
+            v
+     SaLUT web application
+            |
+            v
+       Turso/libSQL
+        /    |     \
+       /     |      \
+ Power BI  Power    Salesforce
+ reports  Automate  downstream
+          alerts    project/CRM view
+            |
+            v
+       Teams / Outlook
+
+ChatGPT Business: controlled analysis of approved reports and documentation
+```
+
+Final Microsoft 365, Salesforce, and ChatGPT licensing and connector availability should be confirmed with SaLUT before production implementation. The design prioritizes existing subscriptions and avoids adding recurring services to the core transaction path.
+
 ## Testing
 `npm test` runs 20 automated API tests, including a 25-way simultaneous-request race, idempotent retries, all-or-nothing conflicts, holder lookup from the database, undo tokens, admin authorisation, reversal rules, bulk ID generation, CSV formula safety, required-field rules from the old form, a 90-item transaction, the CSV importer (including all-or-nothing validation) and an in-place upgrade of databases from the first release, and rate limiting. A browser smoke run should exercise the staff flow, the desktop layout, and every admin tab before deployment.

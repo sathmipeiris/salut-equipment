@@ -95,6 +95,8 @@ The SaLUT wordmark and circular mark supplied for this project are in `public/br
 - [`docs/TECHNICAL_SUMMARY.md`](docs/TECHNICAL_SUMMARY.md): approach, storage, security, costs, dashboard connection
 - [`docs/DEVELOPMENT_RECORD.md`](docs/DEVELOPMENT_RECORD.md): time, tools, completed features, limitations, next steps
 
+The technical summary also describes optional Microsoft 365, Salesforce, and ChatGPT Business integration patterns. These are intentionally downstream from the app's transaction database and are not claimed as configured tenant integrations.
+
 ## Project layout
 
 ```
